@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Car Puzzle</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script src="https://cdn.jsdelivr.net/npm/@svgdotjs/svg.js@3.1.2/dist/svg.min.js"></script>
+  <style>
+    body, html { margin: 0; padding: 0; height: 100%; overflow: hidden; }
+    #puzzle-container { width: 100%; height: 100%; }
+  </style>
+</head>
+<body>
+  <div id="puzzle-container"></div>
+
+  <script>
+    // This channel is how we send messages back to the Flutter app
+    function postToFlutter(message) {
+      // The parent window is the Flutter app
+      window.parent.postMessage(message, '*');
+    }
+
+    const urlParams = new URLSearchParams(window.location.search);
+    const puzzleUrl = urlParams.get('puzzleUrl');
+
+    let svgInstance;
+    let partsRef = {};
+
+    async function loadSVGContent() {
+      try {
+        const response = await fetch(puzzleUrl);
+        const svgText = await response.text();
+        
+        const container = document.getElementById('puzzle-container');
+        container.innerHTML = svgText;
+        
+        const svgElement = container.querySelector('svg');
+        svgElement.id = 'puzzleSvg';
+        svgElement.style.width = '100%';
+        svgElement.style.height = '100%';
+
+        initializeSVGInteraction();
+      } catch (error) {
+        console.error('Error loading SVG:', error);
+        if (flutterChannel) {
+          flutterChannel.postMessage('Error: Could not load puzzle');
+        }
+      }
+    }
+
+    function initializeSVGInteraction() {
+      svgInstance = SVG('#puzzleSvg');
+      initAllDraggables();
+    }
+
+    function getSVGCoordsFromEvent(e) {
+      const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+      const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+      return svgInstance.point(clientX, clientY);
+    }
+
+    function setupDrag(dragId) {
+      const thumb = SVG(`#t${dragId}`);
+      const target = SVG(`#g${dragId}`);
+
+      if (!thumb || !target) return;
+
+      thumb.on('mousedown touchstart', (e) => {
+        e.preventDefault();
+        const floating = target.clone().addTo(svgInstance).opacity(0.5).front();
+        const { x, y } = getSVGCoordsFromEvent(e);
+        floating.center(x, y);
+
+        function moveHandler(ev) {
+          const { x, y } = getSVGCoordsFromEvent(ev);
+          floating.center(x, y);
+        }
+
+        function upHandler(ev) {
+          document.removeEventListener('mousemove', moveHandler);
+          document.removeEventListener('mouseup', upHandler);
+          document.removeEventListener('touchmove', moveHandler);
+          document.removeEventListener('touchend', upHandler);
+
+          const dist = Math.hypot(floating.cx() - partsRef[dragId].center.x, floating.cy() - partsRef[dragId].center.y);
+
+          if (dist < 50) {
+            target.show();
+            floating.remove();
+            thumb.hide();
+            checkCompletion();
+          } else {
+            floating.animate(300).center(thumb.cx(), thumb.cy()).after(() => floating.remove());
+          }
+        }
+
+        document.addEventListener('mousemove', moveHandler);
+        document.addEventListener('mouseup', upHandler);
+        document.addEventListener('touchmove', moveHandler);
+        document.addEventListener('touchend', upHandler);
+      });
+    }
+
+    function initAllDraggables() {
+      const groups = svgInstance.find('[id^=g]');
+      groups.forEach(group => {
+        const id = group.attr('id');
+        if (id && id.startsWith('g')) {
+          const num = id.substring(1);
+          const bbox = group.bbox();
+          partsRef[num] = { target: group, center: { x: bbox.cx, y: bbox.cy } };
+          group.hide();
+          setupDrag(num);
+        }
+      });
+    }
+
+    function checkCompletion() {
+      const remaining = svgInstance.find('[id^=t]').filter(el => el.visible());
+      if (remaining.length === 0) {
+        postToFlutter('puzzle_completed');
+      }
+    }
+
+    if (puzzleUrl) {
+      loadSVGContent();
+    } else {
+      postToFlutter('Error: No puzzle URL provided');
+    }
+  </script>
+</body>
+</html>

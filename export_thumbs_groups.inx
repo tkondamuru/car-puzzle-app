@@ -1,0 +1,7 @@
+<inkscape-extension xmlns="http://www.inkscape.org/namespace/inkscape/extension">
+  <name>Export Groups Under _thumbs</name>
+  <id>custom.export.thumbs</id>
+  <param name="output_directory" type="path" gui-text="Output Directory" />
+  <script type="python">export_thumbs_groups.py</script>
+  <dependency type="executable">python3</dependency>
+</inkscape-extension>

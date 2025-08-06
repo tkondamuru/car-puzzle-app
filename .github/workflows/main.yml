@@ -44,6 +44,3 @@ jobs:
         
         BLOB_URL="https://$ACCOUNT_NAME.blob.core.windows.net/$CONTAINER_NAME/$BLOB_NAME"
         echo "APK_URL=$BLOB_URL" >> $GITHUB_ENV
-
-    - name: Display APK URL
-      run: echo "APK uploaded to: ${{ env.APK_URL }}"

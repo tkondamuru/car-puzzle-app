@@ -3,6 +3,7 @@ import 'package:car_puzzle_app/services/game_state.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:http/http.dart' as http;
 import 'package:provider/provider.dart';
 import 'package:car_puzzle_app/services/puzzle_service.dart';
 import 'package:car_puzzle_app/models/puzzle.dart';
@@ -23,13 +24,15 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     Provider.of<PuzzleService>(context, listen: false).fetchPuzzles().then((_) {
-      setState(() {
-        _allTags = Provider.of<PuzzleService>(context, listen: false)
-            .puzzles
-            .expand((p) => p.tags)
-            .toSet()
-            .toList();
-      });
+      if (mounted) {
+        setState(() {
+          _allTags = Provider.of<PuzzleService>(context, listen: false)
+              .puzzles
+              .expand((p) => p.tags)
+              .toSet()
+              .toList();
+        });
+      }
     });
   }
 
@@ -38,7 +41,7 @@ class _HomeScreenState extends State<HomeScreen> {
     return puzzleService.puzzles.where((puzzle) {
       final query = _searchQuery.toLowerCase();
       final nameMatch = puzzle.name.toLowerCase().contains(query);
-      final descMatch = puzzle.desc.toLowerCase().contains(query);
+      final descMatch = puzzle.description.toLowerCase().contains(query);
       final tagsMatch = _selectedTags.isEmpty || puzzle.tags.any((tag) => _selectedTags.contains(tag));
       return (nameMatch || descMatch) && tagsMatch;
     }).toList();
@@ -206,6 +209,28 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  Future<void> _startPuzzle(Puzzle puzzle) async {
+    final hasDimensions = puzzle.img.any((path) => path.endsWith('dimensions.txt'));
+
+    if (hasDimensions) {
+      if (mounted) {
+        final gameState = Provider.of<GameState>(context, listen: false);
+        gameState.setActivePuzzle(puzzle);
+        Navigator.pushNamed(context, '/puzzle', arguments: puzzle).then((result) {
+          if (result != null && mounted) {
+            gameState.setPendingNavigation(result.toString());
+          }
+        });
+      }
+    } else {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Puzzle is building, please try again later.')),
+        );
+      }
+    }
+  }
+
   Widget _buildPuzzleCard(Puzzle puzzle) {
     return Card(
       elevation: 4,
@@ -217,7 +242,7 @@ class _HomeScreenState extends State<HomeScreen> {
           Padding(
             padding: const EdgeInsets.fromLTRB(8.0, 8.0, 8.0, 0),
             child: Tooltip(
-              message: puzzle.desc,
+              message: puzzle.description,
               child: Text(
                 puzzle.name,
                 style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
@@ -229,7 +254,7 @@ class _HomeScreenState extends State<HomeScreen> {
           Expanded(
             child: Center(
               child: SvgPicture.network(
-                'http://localhost:8000/${puzzle.img}',
+                'https://puzzle-assets.agility-maint.net/${puzzle.img.firstWhere((path) => path.endsWith('.svg'), orElse: () => '')}',
                 fit: BoxFit.contain,
                 placeholderBuilder: (BuildContext context) => const Padding(
                   padding: EdgeInsets.all(20.0),
@@ -245,16 +270,7 @@ class _HomeScreenState extends State<HomeScreen> {
               children: [
                 Text('${puzzle.pieces} pieces', style: const TextStyle(fontSize: 12)),
                 ElevatedButton(
-                  onPressed: () {
-                    final gameState = Provider.of<GameState>(context, listen: false);
-                    gameState.setActivePuzzle(puzzle);
-                    Navigator.pushNamed(context, '/puzzle', arguments: puzzle).then((result) {
-                      // Handle navigation result
-                      if (result != null && mounted) {
-                        gameState.setPendingNavigation(result.toString());
-                      }
-                    });
-                  },
+                  onPressed: () => _startPuzzle(puzzle),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.pinkAccent,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),

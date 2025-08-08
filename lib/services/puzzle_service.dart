@@ -1,8 +1,9 @@
 import 'dart:convert';
-import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import '../models/puzzle.dart';
+
+const String baseUrl = 'https://puzzle-assets.agility-maint.net';
 
 class PuzzleService extends ChangeNotifier {
   List<Puzzle> _puzzles = [];
@@ -10,7 +11,7 @@ class PuzzleService extends ChangeNotifier {
 
   Future<void> fetchPuzzles() async {
     try {
-      final response = await http.get(Uri.parse('http://localhost:8000/cars.js'));
+      final response = await http.get(Uri.parse('https://puzzle-manager.agility-maint.net/puzzles'));
       if (response.statusCode == 200) {
         final List<dynamic> jsonList = json.decode(response.body);
         _puzzles = jsonList.map((json) => Puzzle.fromJson(json)).toList();
@@ -18,14 +19,35 @@ class PuzzleService extends ChangeNotifier {
       } else {
         print('Server error: ${response.statusCode}');
       }
-    }
- catch (e) {
+    } catch (e) {
       print('Network error: $e');
     }
   }
 
-  Future<PuzzleData> loadPuzzle(String puzzleId) async {
-    final dimensionsString = await rootBundle.loadString('assets/puzzles/dimensions.txt');
+  Future<PuzzleData?> loadPuzzle(String puzzleId) async {
+    final puzzle = _puzzles.firstWhere((p) => p.id == puzzleId, orElse: () => throw Exception('Puzzle not found'));
+    final dimensionsPath = puzzle.img.firstWhere((path) => path.endsWith('dimensions.txt'), orElse: () => '');
+
+    if (dimensionsPath.isEmpty) {
+      return PuzzleData(
+        pieces: [],
+        overallBounds: Rect.zero,
+        puzzleSize: Size.zero,
+      );
+    }
+
+    final dimensionsUrl = '$baseUrl/$dimensionsPath';
+    final dimensionsResponse = await http.get(Uri.parse(dimensionsUrl));
+    if (dimensionsResponse.statusCode != 200) {
+      print('Failed to load dimensions.txt: ${dimensionsResponse.statusCode}');
+      return PuzzleData(
+        pieces: [],
+        overallBounds: Rect.zero,
+        puzzleSize: Size.zero,
+      );
+    }
+
+    final dimensionsString = dimensionsResponse.body;
     final lines = dimensionsString.split('\n');
 
     final boundsById = <String, Rect>{};
@@ -47,7 +69,11 @@ class PuzzleService extends ChangeNotifier {
         .toList();
 
     if (puzzlePiecesBounds.isEmpty) {
-      throw Exception('No puzzle pieces found in dimensions.txt');
+      return PuzzleData(
+        pieces: [],
+        overallBounds: Rect.zero,
+        puzzleSize: Size.zero,
+      );
     }
 
     Rect overallBounds = puzzlePiecesBounds.first;
@@ -61,14 +87,22 @@ class PuzzleService extends ChangeNotifier {
         final thumbId = id.replaceFirst('g', 't');
         final thumbBounds = boundsById[thumbId] ?? Rect.zero;
 
-        pieces.add(PuzzlePiece(
-          id: id,
-          bounds: pieceBounds, // Absolute bounds
-          thumbBounds: thumbBounds,
-          imageBounds: pieceBounds, // Absolute bounds
-          imagePath: 'assets/puzzles/${puzzleId}_$id.png',
-          thumbPath: 'assets/puzzles/${puzzleId}_$thumbId.png',
-        ));
+        final imagePathFragment = puzzle.img.firstWhere(
+            (path) => path.contains('_$id.'), orElse: () => '');
+        
+        final thumbPathFragment = puzzle.img.firstWhere(
+            (path) => path.contains('_$thumbId.'), orElse: () => '');
+
+        if (imagePathFragment.isNotEmpty && thumbPathFragment.isNotEmpty) {
+             pieces.add(PuzzlePiece(
+                id: id,
+                bounds: pieceBounds, // Absolute bounds
+                thumbBounds: thumbBounds,
+                imageBounds: pieceBounds, // Absolute bounds
+                imagePath: '$baseUrl/$imagePathFragment',
+                thumbPath: '$baseUrl/$thumbPathFragment',
+            ));
+        }
       }
     });
 

@@ -100,11 +100,19 @@ class _PuzzleScreenState extends State<PuzzleScreen> with WidgetsBindingObserver
   }
 
   Future<void> _loadPuzzleData() async {
-    final puzzleService = PuzzleService();
+    final puzzleService = Provider.of<PuzzleService>(context, listen: false);
     final puzzleData = await puzzleService.loadPuzzle(puzzle.id);
-    setState(() {
-      _puzzleData = puzzleData;
-    });
+    if (mounted) {
+      setState(() {
+        _puzzleData = puzzleData;
+        if (_puzzleData != null && _puzzleData!.pieces.isEmpty) {
+          // Handle case where puzzle data is not available
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Puzzle is not ready yet.')),
+          );
+        }
+      });
+    }
   }
 
   void _startTimer() {
@@ -188,7 +196,7 @@ class _PuzzleScreenState extends State<PuzzleScreen> with WidgetsBindingObserver
             children: [
               Text(puzzle.name),
               Text(
-                puzzle.desc,
+                puzzle.description,
                 style: const TextStyle(fontSize: 12),
                 overflow: TextOverflow.ellipsis,
               ),
@@ -394,7 +402,7 @@ class _PuzzleScreenState extends State<PuzzleScreen> with WidgetsBindingObserver
     return _placedPieces.map((piece) {
       final position = _calculateTargetPosition(piece);
 
-      Widget pieceWidget = Image.asset(
+      Widget pieceWidget = Image.network(
         piece.imagePath,
         width: piece.bounds.width * _scale,
         height: piece.bounds.height * _scale,
@@ -464,7 +472,7 @@ class _PuzzleScreenState extends State<PuzzleScreen> with WidgetsBindingObserver
         dashPattern: const [6, 3],
         child: Opacity(
           opacity: 0.4,
-          child: Image.asset(
+          child: Image.network(
             piece.imagePath,
             fit: BoxFit.fill,
           ),
@@ -481,7 +489,7 @@ class _PuzzleScreenState extends State<PuzzleScreen> with WidgetsBindingObserver
       runSpacing: 8.0,
       alignment: WrapAlignment.center,
       children: _puzzleData!.pieces.map((piece) {
-        final thumbImage = Image.asset(
+        final thumbImage = Image.network(
           piece.thumbPath,
           width: piece.thumbBounds.width * _scale,
           height: piece.thumbBounds.height * _scale,
@@ -496,7 +504,7 @@ class _PuzzleScreenState extends State<PuzzleScreen> with WidgetsBindingObserver
 
         return Draggable<PuzzlePiece>(
           data: piece,
-          feedback: Image.asset(
+          feedback: Image.network(
             piece.imagePath,
             width: piece.bounds.width * _scale,
             height: piece.bounds.height * _scale,

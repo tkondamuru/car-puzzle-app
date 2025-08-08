@@ -2,11 +2,11 @@
 import 'package:flutter/material.dart';
 
 class Puzzle {
-  final String id; // e.g., "079I0049x"
+  final String id; // e.g., "puzzle-1754628029793"
   final String name; // e.g., "Classic Blue Sedan"
-  final String img;
+  final List<String> img;
   final int level;
-  final String desc;
+  final String description;
   final int pieces;
   final List<String> tags;
 
@@ -15,23 +15,18 @@ class Puzzle {
     required this.name,
     required this.img,
     required this.level,
-    required this.desc,
+    required this.description,
     required this.pieces,
     required this.tags,
   });
 
   factory Puzzle.fromJson(Map<String, dynamic> json) {
-    final imgUrl = json['img'];
-    final uri = Uri.parse(imgUrl);
-    final filename = uri.pathSegments.last;
-    final puzzleId = filename.substring(0, filename.lastIndexOf('.'));
-
     return Puzzle(
-      id: puzzleId,
+      id: json['id'],
       name: json['name'],
-      img: json['img'],
+      img: List<String>.from(json['img']),
       level: _levelToInt(json['level']),
-      desc: json['desc'],
+      description: json['description'],
       pieces: json['pieces'],
       tags: json['tags'] is String ? (json['tags'] as String).split(',') : List<String>.from(json['tags']),
     );

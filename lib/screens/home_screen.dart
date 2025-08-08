@@ -17,12 +17,14 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   String _searchQuery = '';
+  late final TextEditingController _searchController;
   List<String> _selectedTags = [];
   List<String> _allTags = [];
 
   @override
   void initState() {
     super.initState();
+    _searchController = TextEditingController(text: _searchQuery);
     Provider.of<PuzzleService>(context, listen: false).fetchPuzzles().then((_) {
       if (mounted) {
         setState(() {
@@ -34,6 +36,12 @@ class _HomeScreenState extends State<HomeScreen> {
         });
       }
     });
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
   }
 
   List<Puzzle> _getFilteredPuzzles() {
@@ -72,8 +80,6 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                   child: Column(
                     children: [
-                      _buildSearchAndFilter(),
-                      const SizedBox(height: 16),
                       Expanded(
                         child: _buildPuzzleList(),
                       ),
@@ -91,23 +97,20 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildHeader() {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 20.0, horizontal: 16.0),
-      child: Column(
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Text(
-            'Kids Puzzle Palace',
+            'Puzzle Palace',
             style: GoogleFonts.nunito(
               fontSize: 36,
               fontWeight: FontWeight.bold,
               color: Colors.white,
             ),
           ),
-          const SizedBox(height: 8),
-          Text(
-            'Solve amazing puzzles and become a puzzle master!',
-            style: GoogleFonts.nunito(
-              fontSize: 16,
-              color: Colors.white70,
-            ),
+          IconButton(
+            icon: const Icon(Icons.search, color: Colors.white, size: 30),
+            onPressed: _showSearchAndFilterSheet,
           ),
         ],
       ),
@@ -133,80 +136,77 @@ class _HomeScreenState extends State<HomeScreen> {
           );
   }
 
-  Widget _buildSearchAndFilter() {
-    return Row(
-      children: [
-        Expanded(
-          child: TextField(
-            onChanged: (value) {
-              setState(() {
-                _searchQuery = value;
-              });
-            },
-            decoration: InputDecoration(
-              hintText: 'Search puzzles...',
-              prefixIcon: const Icon(Icons.search),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-                borderSide: BorderSide.none,
-              ),
-              filled: true,
-              fillColor: Colors.grey[200],
-            ),
-          ),
-        ),
-        const SizedBox(width: 8),
-        ElevatedButton.icon(
-          onPressed: _showTagFilterSheet,
-          icon: const Icon(Icons.filter_list),
-          label: const Text('Filter'),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.pinkAccent,
-            //add white color to text
-            foregroundColor: Colors.white,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-          ),
-        ),
-      ],
-    );
-  }
-
-  void _showTagFilterSheet() {
+  void _showSearchAndFilterSheet() {
     showModalBottomSheet(
       context: context,
+      isScrollControlled: true,
       builder: (context) {
         return StatefulBuilder(
           builder: (BuildContext context, StateSetter setModalState) {
             return Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Wrap(
-                spacing: 8.0,
-                runSpacing: 8.0,
-                children: _allTags.map((tag) {
-                  final isSelected = _selectedTags.contains(tag);
-                  return FilterChip(
-                    label: Text(tag),
-                    selected: isSelected,
-                    onSelected: (selected) {
-                      setModalState(() {
-                        if (selected) {
-                          _selectedTags.add(tag);
-                        } else {
-                          _selectedTags.remove(tag);
-                        }
-                      });
-                      setState(() {}); // Rebuild the main screen to apply the filter
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.of(context).viewInsets.bottom,
+                left: 16.0,
+                right: 16.0,
+                top: 16.0,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: _searchController,
+                    onChanged: (value) {
+                      _searchQuery = value;
                     },
-                    selectedColor: Colors.pinkAccent,
-                    labelStyle: TextStyle(color: isSelected ? Colors.white : Colors.black),
-                  );
-                }).toList(),
+                    decoration: InputDecoration(
+                      hintText: 'Search puzzles...',
+                      prefixIcon: const Icon(Icons.search),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: BorderSide.none,
+                      ),
+                      filled: true,
+                      fillColor: Colors.grey[200],
+                    ),
+                    onEditingComplete: () {
+                      setState(() {});
+                      Navigator.pop(context);
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                  Wrap(
+                    spacing: 8.0,
+                    runSpacing: 8.0,
+                    children: _allTags.map((tag) {
+                      final isSelected = _selectedTags.contains(tag);
+                      return FilterChip(
+                        label: Text(tag),
+                        selected: isSelected,
+                        onSelected: (selected) {
+                          setModalState(() {
+                            if (selected) {
+                              _selectedTags.add(tag);
+                            } else {
+                              _selectedTags.remove(tag);
+                            }
+                          });
+                          setState(() {}); // Rebuild the main screen to apply the filter
+                        },
+                        selectedColor: Colors.pinkAccent,
+                        labelStyle: TextStyle(color: isSelected ? Colors.white : Colors.black),
+                      );
+                    }).toList(),
+                  ),
+                  const SizedBox(height: 16),
+                ],
               ),
             );
           },
         );
       },
-    );
+    ).whenComplete(() {
+      setState(() {}); // Ensure the UI updates with the new search query
+    });
   }
 
   Future<void> _startPuzzle(Puzzle puzzle) async {

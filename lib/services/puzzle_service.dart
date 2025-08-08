@@ -20,7 +20,7 @@ class PuzzleService extends ChangeNotifier {
         print('Server error: ${response.statusCode}');
       }
     } catch (e) {
-      print('Network error: $e');
+      print('Network error while fetching puzzles: $e');
     }
   }
 

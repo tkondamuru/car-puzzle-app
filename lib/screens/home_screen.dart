@@ -8,6 +8,9 @@ import 'package:provider/provider.dart';
 import 'package:car_puzzle_app/services/puzzle_service.dart';
 import 'package:car_puzzle_app/models/puzzle.dart';
 
+//const String baseUrl = 'https://puzzle-assets.agility-maint.net';
+const String baseUrl = 'https://pub-0190997ca1814eaf8cb0bffd73e7abb2.r2.dev';
+
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
@@ -72,8 +75,8 @@ class _HomeScreenState extends State<HomeScreen> {
               _buildHeader(),
               Expanded(
                 child: Container(
-                  margin: const EdgeInsets.all(16.0),
-                  padding: const EdgeInsets.all(16.0),
+                  margin: const EdgeInsets.all(8.0),
+                  padding: const EdgeInsets.all(8.0),
                   decoration: BoxDecoration(
                     color: Colors.white,
                     borderRadius: BorderRadius.circular(20),
@@ -96,7 +99,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildHeader() {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 20.0, horizontal: 16.0),
+      padding: const EdgeInsets.symmetric(vertical: 1.0, horizontal: 16.0),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
@@ -254,7 +257,7 @@ class _HomeScreenState extends State<HomeScreen> {
           Expanded(
             child: Center(
               child: SvgPicture.network(
-                'https://puzzle-assets.agility-maint.net/${puzzle.img.firstWhere((path) => path.endsWith('.svg'), orElse: () => '')}',
+                '$baseUrl/${puzzle.img.firstWhere((path) => path.endsWith('.svg'), orElse: () => '')}',
                 fit: BoxFit.contain,
                 placeholderBuilder: (BuildContext context) => const Padding(
                   padding: EdgeInsets.all(20.0),
@@ -268,7 +271,12 @@ class _HomeScreenState extends State<HomeScreen> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text('${puzzle.pieces} pieces', style: const TextStyle(fontSize: 12)),
+                Chip(
+                  label: Text('${puzzle.pieces}'),
+                  backgroundColor: Colors.pinkAccent.withOpacity(0.2),
+                  labelStyle: const TextStyle(fontSize: 12, color: Colors.black87),
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                ),
                 ElevatedButton(
                   onPressed: () => _startPuzzle(puzzle),
                   style: ElevatedButton.styleFrom(

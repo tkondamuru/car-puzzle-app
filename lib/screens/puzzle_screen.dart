@@ -30,8 +30,10 @@ class _PuzzleScreenState extends State<PuzzleScreen> with WidgetsBindingObserver
   PuzzlePiece? _anchorPiece;
   Offset? _anchorPosition;
 
-  PuzzlePiece? _draggedPiece;
-  Offset? _dragPosition;
+  PuzzlePiece? _activePiece;
+  Offset? _activePiecePosition;
+
+  bool _showGhost = false;
 
   double _scale = 0.5;
   final GlobalKey _canvasKey = GlobalKey();
@@ -46,20 +48,36 @@ class _PuzzleScreenState extends State<PuzzleScreen> with WidgetsBindingObserver
   void didChangeDependencies() {
     super.didChangeDependencies();
     if (!_isInitialized) {
+      _isInitialized = true;
       puzzle = ModalRoute.of(context)!.settings.arguments as Puzzle;
       _gameState = Provider.of<GameState>(context, listen: false);
       _statsService = Provider.of<StatsService>(context, listen: false);
 
-      // Set this puzzle as the active puzzle in GameState
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) {
-          _gameState.setActivePuzzle(puzzle);
-        }
+        _initializeGame();
       });
-      _loadPuzzleData().then((_) => _loadState()); // Load state after puzzle data is loaded
-      _startTimer();
-      _isInitialized = true;
     }
+  }
+
+  Future<void> _initializeGame() async {
+    if (!mounted) return;
+    _gameState.setActivePuzzle(puzzle);
+    
+    await _loadPuzzleData();
+    if (!mounted) return;
+
+    _loadState();
+    if (!mounted) return;
+
+    // After the data is loaded and state is restored, wait for the next frame
+    // to ensure the canvas is built before we try to place the first piece.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _placedPieces.isEmpty && _activePiece == null) {
+        _selectRandomPiece(isAnchor: true);
+      }
+    });
+
+    _startTimer();
   }
 
   @override
@@ -105,7 +123,7 @@ class _PuzzleScreenState extends State<PuzzleScreen> with WidgetsBindingObserver
     if (mounted) {
       setState(() {
         _puzzleData = puzzleData;
-        if (_puzzleData != null && _puzzleData!.pieces.isEmpty) {
+        if (_puzzleData == null || _puzzleData!.pieces.isEmpty) {
           // Handle case where puzzle data is not available
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('Puzzle is not ready yet.')),
@@ -113,6 +131,73 @@ class _PuzzleScreenState extends State<PuzzleScreen> with WidgetsBindingObserver
         }
       });
     }
+  }
+
+  void _selectRandomPiece({bool isAnchor = false}) {
+    final unplacedPieces = _puzzleData?.pieces.where((p) => !p.isPlaced).toList();
+    
+    if (unplacedPieces == null || unplacedPieces.isEmpty) {
+      return;
+    }
+
+    PuzzlePiece piece;
+    if (isAnchor) {
+      // Always start with g0 piece as anchor
+      piece = _puzzleData!.pieces.firstWhere(
+        (p) => p.id == 'g0' && !p.isPlaced,
+        orElse: () => unplacedPieces.first,
+      );
+    } else {
+      // Get next available piece (ordered by ID for predictability)
+      piece = unplacedPieces.first;
+    }
+
+    final renderBox = _canvasKey.currentContext?.findRenderObject() as RenderBox?;
+    if (renderBox == null) return;
+    final canvasSize = renderBox.size;
+    
+    Offset position;
+    if (isAnchor) {
+      // Place anchor piece (g0) at center
+      position = Offset(
+        (canvasSize.width / 2) - (piece.bounds.width * _scale / 2),
+        (canvasSize.height / 2) - (piece.bounds.height * _scale / 2),
+      );
+    } else {
+      // Place other pieces in lower area, alternating left and right
+      final placedCount = _placedPieces.length;
+      final isLeftSide = placedCount % 2 == 0;
+      
+      final xPosition = isLeftSide 
+        ? (canvasSize.width * 0.25) - (piece.bounds.width * _scale / 2)  // Left quarter
+        : (canvasSize.width * 0.75) - (piece.bounds.width * _scale / 2); // Right quarter
+      
+      final yPosition = (canvasSize.height * 0.7) - (piece.bounds.height * _scale / 2); // Lower area
+      
+      position = Offset(xPosition, yPosition);
+    }
+
+    setState(() {
+      if (isAnchor || _anchorPiece == null) {
+        // This is the first piece, it becomes the anchor and is immediately placed.
+        _anchorPiece = piece;
+        _anchorPosition = position;
+        _placedPieces.add(piece);
+        piece.isPlaced = true;
+      } else {
+        // This is a subsequent piece.
+        _activePiece = piece;
+        _activePiecePosition = position;
+      }
+    });
+  }
+
+  void _getNextPiece() {
+    if (_activePiece != null) {
+      // If there's already an active piece, don't get another one
+      return;
+    }
+    _selectRandomPiece();
   }
 
   void _startTimer() {
@@ -158,10 +243,18 @@ class _PuzzleScreenState extends State<PuzzleScreen> with WidgetsBindingObserver
       _anchorPiece = null;
       _anchorPosition = null;
       _elapsedSeconds = 0;
-      _draggedPiece = null;
-      _dragPosition = null;
+      _activePiece = null;
+      _activePiecePosition = null;
+      _showGhost = false;
     });
     _startTimer();
+    
+    // Always place g0 as the anchor after reset
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        _selectRandomPiece(isAnchor: true);
+      }
+    });
   }
 
   @override
@@ -178,6 +271,78 @@ class _PuzzleScreenState extends State<PuzzleScreen> with WidgetsBindingObserver
     return '$mins:$secs';
   }
 
+  void _showPuzzleInfoSheet() {
+    showModalBottomSheet(
+      context: context,
+      builder: (context) {
+        return Padding(
+          padding: const EdgeInsets.all(24.0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                puzzle.name,
+                style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                puzzle.description,
+                style: Theme.of(context).textTheme.bodyLarge,
+              ),
+              const SizedBox(height: 16),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  void _showScaleSliderSheet() {
+    showModalBottomSheet(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (BuildContext context, StateSetter setModalState) {
+            return Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 20.0),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text('Adjust Puzzle Size', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(Icons.photo_size_select_small),
+                      Expanded(
+                        child: Slider(
+                          value: _scale,
+                          min: 0.1,
+                          max: 1.0,
+                          divisions: 9,
+                          label: _scale.toStringAsFixed(1),
+                          onChanged: (double value) {
+                            // Use setState from the main screen state
+                            setState(() {
+                              _scale = value;
+                            });
+                            // Also update the modal sheet's state
+                            setModalState(() {});
+                          },
+                        ),
+                      ),
+                      const Icon(Icons.photo_size_select_large),
+                    ],
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final gameState = Provider.of<GameState>(context);
@@ -191,18 +356,18 @@ class _PuzzleScreenState extends State<PuzzleScreen> with WidgetsBindingObserver
       },
       child: Scaffold(
         appBar: AppBar(
-          title: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(puzzle.name),
-              Text(
-                puzzle.description,
-                style: const TextStyle(fontSize: 12),
-                overflow: TextOverflow.ellipsis,
-              ),
-            ],
-          ),
+          title: const Text('Game!'),
           actions: [
+            IconButton(
+              icon: const Icon(Icons.info_outline),
+              onPressed: _showPuzzleInfoSheet,
+              tooltip: 'About Puzzle',
+            ),
+            IconButton(
+              icon: const Icon(Icons.tune),
+              onPressed: _showScaleSliderSheet,
+              tooltip: 'Adjust Size',
+            ),
             IconButton(
               icon: const Icon(Icons.refresh),
               onPressed: _resetPuzzle,
@@ -235,15 +400,16 @@ class _PuzzleScreenState extends State<PuzzleScreen> with WidgetsBindingObserver
           ),
           child: _puzzleData == null
               ? const Center(child: CircularProgressIndicator())
-              : SingleChildScrollView(
-                  child: Column(
-                    children: [
-                      _buildScaleSlider(),
-                      _buildCanvasContainer(),
-                      _buildThumbnailContainer(),
-                    ],
-                  ),
-                ),
+              : _buildCanvasContainer(),
+        ),
+        floatingActionButton: GestureDetector(
+          onTap: _getNextPiece,
+          onLongPress: _showPieceDrawer,
+          child: FloatingActionButton(
+            onPressed: null, // Disabled since we handle gestures manually
+            tooltip: 'Tap: Get Next Piece\nLong Press: Select Piece',
+            child: const Icon(Icons.extension),
+          ),
         ),
         bottomNavigationBar: BottomNavigationBar(
           items: <BottomNavigationBarItem>[
@@ -276,35 +442,11 @@ class _PuzzleScreenState extends State<PuzzleScreen> with WidgetsBindingObserver
     );
   }
 
-  Widget _buildScaleSlider() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 8.0),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const Text('Size:', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
-          Expanded(
-            child: Slider(
-              value: _scale,
-              min: 0.1,
-              max: 1.0,
-              divisions: 9,
-              label: _scale.toStringAsFixed(1),
-              onChanged: (double value) {
-                setState(() {
-                  _scale = value;
-                });
-              },
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _buildCanvasContainer() {
     return Container(
-      height: MediaQuery.of(context).size.height * 0.5,
+      // Make it occupy the full screen
+      height: double.infinity,
+      width: double.infinity,
       margin: const EdgeInsets.all(16.0),
       padding: const EdgeInsets.all(8.0),
       decoration: BoxDecoration(
@@ -315,77 +457,166 @@ class _PuzzleScreenState extends State<PuzzleScreen> with WidgetsBindingObserver
     );
   }
 
-  Widget _buildThumbnailContainer() {
-    return Container(
-      margin: const EdgeInsets.fromLTRB(16.0, 0, 16.0, 16.0),
-      padding: const EdgeInsets.all(16.0),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: _buildThumbnailPanel(),
+  void _showPieceDrawer() {
+    showModalBottomSheet(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (BuildContext context, StateSetter setModalState) {
+            final unplacedPieces = _puzzleData?.pieces
+                .where((p) => !_placedPieces.contains(p) && p.id != _activePiece?.id)
+                .toList() ?? [];
+
+            return Column(
+              children: [
+                const Padding(
+                  padding: EdgeInsets.all(16.0),
+                  child: Text(
+                    'Select a Piece',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                ),
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: GridView.builder(
+                      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                        maxCrossAxisExtent: 100,
+                        crossAxisSpacing: 8,
+                        mainAxisSpacing: 8,
+                      ),
+                      itemCount: unplacedPieces.length,
+                      itemBuilder: (context, index) {
+                        final piece = unplacedPieces[index];
+                        return GestureDetector(
+                          onTap: () {
+                            final renderBox = _canvasKey.currentContext?.findRenderObject() as RenderBox?;
+                            if (renderBox == null) return;
+                            final canvasSize = renderBox.size;
+                            final position = Offset(
+                              (canvasSize.width / 2) - (piece.bounds.width * _scale / 2),
+                              (canvasSize.height / 2) - (piece.bounds.height * _scale / 2),
+                            );
+
+                            setState(() {
+                              if (_anchorPiece == null) {
+                                _anchorPiece = piece;
+                                _anchorPosition = position;
+                                _placedPieces.add(piece);
+                                piece.isPlaced = true;
+                              } else {
+                                _activePiece = piece;
+                                _activePiecePosition = position;
+                              }
+                            });
+                            Navigator.pop(context);
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.all(4.0),
+                            decoration: BoxDecoration(
+                              border: Border.all(color: Colors.grey),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Column(
+                              children: [
+                                Expanded(
+                                  child: Image.network(
+                                    piece.thumbPath,
+                                    fit: BoxFit.contain,
+                                  ),
+                                ),
+                                Text(
+                                  piece.id,
+                                  style: const TextStyle(fontSize: 10),
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
   }
 
   Widget _buildCanvas() {
-    return DragTarget<PuzzlePiece>(
-      key: _canvasKey,
-      builder: (context, candidateData, rejectedData) {
-        return LayoutBuilder(builder: (context, constraints) {
-          return Stack(
-            children: [
-              ..._buildPlacedPieces(),
-              if (_draggedPiece != null && _anchorPiece != null) _buildGhostPreview(),
-            ],
-          );
-        });
-      },
-      onWillAcceptWithDetails: (details) => true,
-      onMove: (details) {
-        setState(() {
-          _draggedPiece = details.data;
-          _dragPosition = details.offset;
-        });
-      },
-      onLeave: (data) {
-        setState(() {
-          _draggedPiece = null;
-          _dragPosition = null;
-        });
-      },
-      onAcceptWithDetails: (details) {
-        final piece = details.data;
-        final renderBox = _canvasKey.currentContext?.findRenderObject() as RenderBox?;
-        if (renderBox == null) return;
+    return LayoutBuilder(builder: (context, constraints) {
+      return Stack(
+        key: _canvasKey,
+        children: [
+          ..._buildPlacedPieces(),
+          _buildGhostPreview(),
+          _buildActivePiece(),
+        ],
+      );
+    });
+  }
 
-        final dropPosition = renderBox.globalToLocal(details.offset);
+  Widget _buildActivePiece() {
+    if (_activePiece == null || _activePiecePosition == null) {
+      return const SizedBox.shrink();
+    }
 
-        if (_anchorPiece == null) {
+    final piece = _activePiece!;
+    // Use the full image path and bounds for the piece on the canvas
+    final pieceWidget = Image.network(
+      piece.imagePath,
+      width: piece.bounds.width * _scale,
+      height: piece.bounds.height * _scale,
+      fit: BoxFit.contain,
+    );
+
+    return Positioned(
+      left: _activePiecePosition!.dx,
+      top: _activePiecePosition!.dy,
+      child: GestureDetector(
+        onLongPressStart: (details) {
+          // Show ghost immediately on long press start
           setState(() {
-            _placedPieces.add(piece);
-            _anchorPiece = piece;
-            _anchorPosition = dropPosition;
-            piece.isPlaced = true;
+            _showGhost = true;
           });
-        } else {
+        },
+        onLongPressEnd: (details) {
+          // Hide ghost immediately when long press ends
+          setState(() {
+            _showGhost = false;
+          });
+        },
+        onPanStart: (details) {
+          // Hide ghost when starting to drag
+          setState(() {
+            _showGhost = false;
+          });
+        },
+        onPanUpdate: (details) {
+          setState(() {
+            _activePiecePosition = _activePiecePosition! + details.delta;
+          });
+        },
+        onPanEnd: (details) {
+          // Check for snap on drag end
           final targetPos = _calculateTargetPosition(piece);
-          if ((dropPosition - targetPos).distance < SNAP_THRESHOLD) {
+          if ((_activePiecePosition! - targetPos).distance < SNAP_THRESHOLD) {
             setState(() {
               _placedPieces.add(piece);
               piece.isPlaced = true;
+              _activePiece = null;
+              _activePiecePosition = null;
+
+              if (_placedPieces.length == _puzzleData!.pieces.length) {
+                _onPuzzleCompleted();
+              }
             });
           }
-        }
-
-        if (_placedPieces.length == _puzzleData!.pieces.length) {
-          _onPuzzleCompleted();
-        }
-
-        setState(() {
-          _draggedPiece = null;
-          _dragPosition = null;
-        });
-      },
+        },
+        child: pieceWidget,
+      ),
     );
   }
 
@@ -439,25 +670,10 @@ class _PuzzleScreenState extends State<PuzzleScreen> with WidgetsBindingObserver
   }
 
   Widget _buildGhostPreview() {
-    if (_draggedPiece == null) return const SizedBox.shrink();
+    if (!_showGhost || _activePiece == null) return const SizedBox.shrink();
 
-    final targetPos = _calculateTargetPosition(_draggedPiece!);
-    final piece = _draggedPiece!;
-
-    bool isCloseToSnap = false;
-    if (_dragPosition != null) {
-      final renderBox = _canvasKey.currentContext?.findRenderObject() as RenderBox?;
-      if (renderBox != null) {
-        final dropPosition = renderBox.globalToLocal(_dragPosition!);
-        final adjustedDropPos = Offset(
-          dropPosition.dx - (piece.bounds.width * _scale / 2),
-          dropPosition.dy - (piece.bounds.height * _scale / 2),
-        );
-        if ((adjustedDropPos - targetPos).distance < SNAP_THRESHOLD) {
-          isCloseToSnap = true;
-        }
-      }
-    }
+    final targetPos = _calculateTargetPosition(_activePiece!);
+    final piece = _activePiece!;
 
     return Positioned(
       left: targetPos.dx,
@@ -467,8 +683,8 @@ class _PuzzleScreenState extends State<PuzzleScreen> with WidgetsBindingObserver
       child: DottedBorder(
         borderType: BorderType.RRect,
         radius: const Radius.circular(4),
-        color: isCloseToSnap ? Colors.green.withOpacity(0.8) : Colors.black.withOpacity(0.3),
-        strokeWidth: isCloseToSnap ? 3 : 2,
+        color: Colors.green.withOpacity(0.8),
+        strokeWidth: 3,
         dashPattern: const [6, 3],
         child: Opacity(
           opacity: 0.4,
@@ -478,45 +694,6 @@ class _PuzzleScreenState extends State<PuzzleScreen> with WidgetsBindingObserver
           ),
         ),
       ),
-    );
-  }
-
-  Widget _buildThumbnailPanel() {
-    if (_puzzleData == null) return const SizedBox.shrink();
-
-    return Wrap(
-      spacing: 12.0,
-      runSpacing: 8.0,
-      alignment: WrapAlignment.center,
-      children: _puzzleData!.pieces.map((piece) {
-        final thumbImage = Image.network(
-          piece.thumbPath,
-          width: piece.thumbBounds.width * _scale,
-          height: piece.thumbBounds.height * _scale,
-        );
-
-        if (piece.isPlaced) {
-          return Opacity(
-            opacity: 0.5,
-            child: thumbImage,
-          );
-        }
-
-        return Draggable<PuzzlePiece>(
-          data: piece,
-          feedback: Image.network(
-            piece.imagePath,
-            width: piece.bounds.width * _scale,
-            height: piece.bounds.height * _scale,
-            fit: BoxFit.contain,
-          ),
-          childWhenDragging: Opacity(
-            opacity: 0.5,
-            child: thumbImage,
-          ),
-          child: thumbImage,
-        );
-      }).toList(),
     );
   }
 

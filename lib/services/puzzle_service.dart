@@ -3,7 +3,11 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import '../models/puzzle.dart';
 
-const String baseUrl = 'https://puzzle-assets.agility-maint.net';
+//const String baseUrl = 'https://puzzle-assets.agility-maint.net';
+//const String managerUrl = 'https://puzzle-manager.agility-maint.net';
+
+const String baseUrl = 'https://pub-0190997ca1814eaf8cb0bffd73e7abb2.r2.dev';
+const String managerUrl = 'https://puzzle-game-api.tejasvi-kondamuru.workers.dev';
 
 class PuzzleService extends ChangeNotifier {
   List<Puzzle> _puzzles = [];
@@ -11,7 +15,7 @@ class PuzzleService extends ChangeNotifier {
 
   Future<void> fetchPuzzles() async {
     try {
-      final response = await http.get(Uri.parse('https://puzzle-manager.agility-maint.net/puzzles'));
+      final response = await http.get(Uri.parse('$managerUrl/puzzles'));
       if (response.statusCode == 200) {
         final List<dynamic> jsonList = json.decode(response.body);
         _puzzles = jsonList.map((json) => Puzzle.fromJson(json)).toList();
@@ -84,6 +88,7 @@ class PuzzleService extends ChangeNotifier {
     final pieces = <PuzzlePiece>[];
     boundsById.forEach((id, pieceBounds) {
       if (id.startsWith('g')) {
+        
         final thumbId = id.replaceFirst('g', 't');
         final thumbBounds = boundsById[thumbId] ?? Rect.zero;
 

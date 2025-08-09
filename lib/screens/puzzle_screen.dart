@@ -37,6 +37,7 @@ class _PuzzleScreenState extends State<PuzzleScreen> with WidgetsBindingObserver
 
   double _scale = 0.5;
   final GlobalKey _canvasKey = GlobalKey();
+  int _pieceDropCounter = 0; // Track which side to drop pieces
 
   @override
   void initState() {
@@ -157,24 +158,30 @@ class _PuzzleScreenState extends State<PuzzleScreen> with WidgetsBindingObserver
     final canvasSize = renderBox.size;
     
     Offset position;
-    if (isAnchor) {
-      // Place anchor piece (g0) at center
+    if (isAnchor || _anchorPiece == null) {
+      // Place anchor piece in center
       position = Offset(
         (canvasSize.width / 2) - (piece.bounds.width * _scale / 2),
         (canvasSize.height / 2) - (piece.bounds.height * _scale / 2),
       );
     } else {
-      // Place other pieces in lower area, alternating left and right
-      final placedCount = _placedPieces.length;
-      final isLeftSide = placedCount % 2 == 0;
+      // Use alternating positioning for new pieces
+      _pieceDropCounter++;
+      final bool dropOnLeft = _pieceDropCounter % 2 == 1;
       
-      final xPosition = isLeftSide 
-        ? (canvasSize.width * 0.25) - (piece.bounds.width * _scale / 2)  // Left quarter
-        : (canvasSize.width * 0.75) - (piece.bounds.width * _scale / 2); // Right quarter
-      
-      final yPosition = (canvasSize.height * 0.7) - (piece.bounds.height * _scale / 2); // Lower area
-      
-      position = Offset(xPosition, yPosition);
+      if (dropOnLeft) {
+        // Position on the left side
+        position = Offset(
+          50.0, // Left margin
+          (canvasSize.height / 3) - (piece.bounds.height * _scale / 2),
+        );
+      } else {
+        // Position on the right side
+        position = Offset(
+          canvasSize.width - (piece.bounds.width * _scale) - 50.0, // Right margin
+          (canvasSize.height * 2 / 3) - (piece.bounds.height * _scale / 2),
+        );
+      }
     }
 
     setState(() {
@@ -194,10 +201,44 @@ class _PuzzleScreenState extends State<PuzzleScreen> with WidgetsBindingObserver
 
   void _getNextPiece() {
     if (_activePiece != null) {
-      // If there's already an active piece, don't get another one
+      // If there's already an active piece, reposition it
+      _repositionActivePiece();
       return;
     }
     _selectRandomPiece();
+  }
+
+  void _repositionActivePiece() {
+    if (_activePiece == null) return;
+    
+    final renderBox = _canvasKey.currentContext?.findRenderObject() as RenderBox?;
+    if (renderBox == null) return;
+    
+    final canvasSize = renderBox.size;
+    final piece = _activePiece!;
+    
+    // Alternate between left and right positioning
+    _pieceDropCounter++;
+    final bool dropOnLeft = _pieceDropCounter % 2 == 1;
+    
+    final Offset newPosition;
+    if (dropOnLeft) {
+      // Position on the left side
+      newPosition = Offset(
+        50.0, // Left margin
+        (canvasSize.height / 3) - (piece.bounds.height * _scale / 2),
+      );
+    } else {
+      // Position on the right side
+      newPosition = Offset(
+        canvasSize.width - (piece.bounds.width * _scale) - 50.0, // Right margin
+        (canvasSize.height * 2 / 3) - (piece.bounds.height * _scale / 2),
+      );
+    }
+    
+    setState(() {
+      _activePiecePosition = newPosition;
+    });
   }
 
   void _startTimer() {
@@ -246,6 +287,7 @@ class _PuzzleScreenState extends State<PuzzleScreen> with WidgetsBindingObserver
       _activePiece = null;
       _activePiecePosition = null;
       _showGhost = false;
+      _pieceDropCounter = 0; // Reset piece positioning counter
     });
     _startTimer();
     
@@ -407,7 +449,7 @@ class _PuzzleScreenState extends State<PuzzleScreen> with WidgetsBindingObserver
           onLongPress: _showPieceDrawer,
           child: FloatingActionButton(
             onPressed: null, // Disabled since we handle gestures manually
-            tooltip: 'Tap: Get Next Piece\nLong Press: Select Piece',
+            tooltip: 'Tap: Get Next Piece / Reposition\nLong Press: Select Piece',
             child: const Icon(Icons.extension),
           ),
         ),
@@ -447,11 +489,11 @@ class _PuzzleScreenState extends State<PuzzleScreen> with WidgetsBindingObserver
       // Make it occupy the full screen
       height: double.infinity,
       width: double.infinity,
-      margin: const EdgeInsets.all(16.0),
-      padding: const EdgeInsets.all(8.0),
+      margin: const EdgeInsets.all(4.0),
+      padding: const EdgeInsets.all(4.0),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(12),
       ),
       child: _buildCanvas(),
     );

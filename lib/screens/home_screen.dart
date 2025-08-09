@@ -8,8 +8,8 @@ import 'package:provider/provider.dart';
 import 'package:car_puzzle_app/services/puzzle_service.dart';
 import 'package:car_puzzle_app/models/puzzle.dart';
 
-//const String baseUrl = 'https://puzzle-assets.agility-maint.net';
-const String baseUrl = 'https://pub-0190997ca1814eaf8cb0bffd73e7abb2.r2.dev';
+const String baseUrl = 'https://puzzle-assets.agility-maint.net';
+//const String baseUrl = 'https://pub-0190997ca1814eaf8cb0bffd73e7abb2.r2.dev';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});

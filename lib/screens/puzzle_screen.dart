@@ -38,6 +38,7 @@ class _PuzzleScreenState extends State<PuzzleScreen> with WidgetsBindingObserver
   double _scale = 0.5;
   final GlobalKey _canvasKey = GlobalKey();
   int _pieceDropCounter = 0; // Track which side to drop pieces
+  bool _isScaling = false; // Track if currently scaling
 
   @override
   void initState() {
@@ -333,6 +334,17 @@ class _PuzzleScreenState extends State<PuzzleScreen> with WidgetsBindingObserver
                 style: Theme.of(context).textTheme.bodyLarge,
               ),
               const SizedBox(height: 16),
+              const Text(
+                'How to Play:',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+              ),
+              const SizedBox(height: 8),
+              const Text('• Drag pieces to snap them together'),
+              const Text('• Long press FAB to select specific pieces'),
+              const Text('• Green piece is the anchor - drag it to move all pieces'),
+              const Text('• Pinch the anchor piece to resize the entire puzzle'),
+              const Text('• Double-tap or long-press any snapped piece to make it the new anchor'),
+              const SizedBox(height: 16),
             ],
           ),
         );
@@ -408,7 +420,7 @@ class _PuzzleScreenState extends State<PuzzleScreen> with WidgetsBindingObserver
             IconButton(
               icon: const Icon(Icons.tune),
               onPressed: _showScaleSliderSheet,
-              tooltip: 'Adjust Size',
+              tooltip: 'Precise Size Control',
             ),
             IconButton(
               icon: const Icon(Icons.refresh),
@@ -669,6 +681,29 @@ class _PuzzleScreenState extends State<PuzzleScreen> with WidgetsBindingObserver
     return _anchorPosition! + (relativeOffset * _scale);
   }
 
+  void _switchAnchor(PuzzlePiece newAnchorPiece) {
+    if (_anchorPiece == null || _anchorPosition == null) return;
+    if (newAnchorPiece == _anchorPiece) return; // Already the anchor
+    
+    // Calculate the current position of the new anchor piece
+    final newAnchorCurrentPosition = _calculateTargetPosition(newAnchorPiece);
+    
+    setState(() {
+      // Update anchor piece and position
+      _anchorPiece = newAnchorPiece;
+      _anchorPosition = newAnchorCurrentPosition;
+    });
+    
+    // Show feedback to user
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Anchor changed to piece ${newAnchorPiece.id}'),
+        duration: const Duration(seconds: 1),
+        backgroundColor: Colors.green,
+      ),
+    );
+  }
+
   List<Widget> _buildPlacedPieces() {
     if (_anchorPiece == null || _anchorPosition == null) return [];
     return _placedPieces.map((piece) {
@@ -691,14 +726,48 @@ class _PuzzleScreenState extends State<PuzzleScreen> with WidgetsBindingObserver
           child: pieceWidget,
         );
 
-        // Make the anchor piece draggable
+        // Make the anchor piece draggable and add pinch-to-zoom using only scale gestures
         pieceWidget = GestureDetector(
-          onPanUpdate: (details) {
+          onScaleStart: (details) {
+            // Reset scaling flag
+            _isScaling = false;
+          },
+          onScaleUpdate: (details) {
             setState(() {
-              _anchorPosition = _anchorPosition! + details.delta;
+              if (details.scale != 1.0) {
+                // This is a pinch gesture - update scale
+                _isScaling = true;
+                final newScale = (_scale * details.scale).clamp(0.1, 1.0);
+                _scale = newScale;
+              } else {
+                // This is a pan gesture - update position
+                _anchorPosition = _anchorPosition! + details.focalPointDelta;
+              }
             });
           },
+          onScaleEnd: (details) {
+            // Show feedback only if scaling occurred
+            if (_isScaling) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('Puzzle size: ${(_scale * 100).round()}%'),
+                  duration: const Duration(milliseconds: 800),
+                  backgroundColor: Colors.blue,
+                ),
+              );
+            }
+            _isScaling = false;
+          },
           child: pieceWidget,
+        );
+      } else {
+        // Add double-tap and long-press detection for non-anchor pieces
+        pieceWidget = GestureDetector(
+          onDoubleTap: () => _switchAnchor(piece),
+          onLongPress: () => _switchAnchor(piece),
+          child: Container(
+            child: pieceWidget,
+          ),
         );
       }
 

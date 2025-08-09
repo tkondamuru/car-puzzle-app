@@ -3,11 +3,11 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import '../models/puzzle.dart';
 
-const String baseUrl = 'https://puzzle-assets.agility-maint.net';
-const String managerUrl = 'https://puzzle-manager.agility-maint.net';
+//const String baseUrl = 'https://puzzle-assets.agility-maint.net';
+//const String managerUrl = 'https://puzzle-manager.agility-maint.net';
 
-//const String baseUrl = 'https://pub-0190997ca1814eaf8cb0bffd73e7abb2.r2.dev';
-//const String managerUrl = 'https://puzzle-game-api.tejasvi-kondamuru.workers.dev';
+const String baseUrl = 'https://pub-0190997ca1814eaf8cb0bffd73e7abb2.r2.dev';
+const String managerUrl = 'https://puzzle-game-api.tejasvi-kondamuru.workers.dev';
 
 class PuzzleService extends ChangeNotifier {
   List<Puzzle> _puzzles = [];

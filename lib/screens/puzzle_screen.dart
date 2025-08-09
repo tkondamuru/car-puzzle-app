@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:car_puzzle_app/models/puzzle.dart';
@@ -8,6 +9,17 @@ import 'package:car_puzzle_app/services/game_state.dart';
 import 'package:dotted_border/dotted_border.dart';
 
 const double SNAP_THRESHOLD = 25.0;
+
+const List<String> celebrationMessages = [
+  "🎉 Complete! 🎉", "🌟 Awesome! 🌟", "🎯 Nailed It!", "🏁 You Did It!",
+  "🚀 Well Done!", "🥳 Great Job!", "💫 Puzzle Solved!", "🔥 That Was Fast!",
+  "🎈 Fantastic!", "✅ All Set!", "💥 Boom! Complete!", "👏 Bravo!",
+  "🧠 Smart Move!", "🎮 Victory!", "✨ Excellent Work!", "🎊 You Rock!",
+  "🎵 That Was Smooth!", "🍭 Sweet Success!", "🧩 Puzzle Master!",
+  "🌈 Magic Move!", "🏆 Champion!", "🎨 Masterpiece!", "🎤 Mic Drop!",
+  "😎 Too Cool!", "🔓 Unlocked!", "🦄 Nailed the Magic!", "🥇 First Place!",
+  "🌟 Superstar!", "🛸 Out of This World!"
+];
 
 class PuzzleScreen extends StatefulWidget {
   const PuzzleScreen({super.key});
@@ -38,7 +50,6 @@ class _PuzzleScreenState extends State<PuzzleScreen> with WidgetsBindingObserver
   double _scale = 0.5;
   final GlobalKey _canvasKey = GlobalKey();
   int _pieceDropCounter = 0; // Track which side to drop pieces
-  bool _isScaling = false; // Track if currently scaling
 
   @override
   void initState() {
@@ -342,8 +353,8 @@ class _PuzzleScreenState extends State<PuzzleScreen> with WidgetsBindingObserver
               const Text('• Drag pieces to snap them together'),
               const Text('• Long press FAB to select specific pieces'),
               const Text('• Green piece is the anchor - drag it to move all pieces'),
-              const Text('• Pinch the anchor piece to resize the entire puzzle'),
               const Text('• Double-tap or long-press any snapped piece to make it the new anchor'),
+              const Text('• Use the tune button for precise size control'),
               const SizedBox(height: 16),
             ],
           ),
@@ -661,11 +672,14 @@ class _PuzzleScreenState extends State<PuzzleScreen> with WidgetsBindingObserver
               piece.isPlaced = true;
               _activePiece = null;
               _activePiecePosition = null;
-
-              if (_placedPieces.length == _puzzleData!.pieces.length) {
-                _onPuzzleCompleted();
-              }
             });
+            
+            // Show celebration message for successful snap
+            _showRandomCelebration();
+
+            if (_placedPieces.length == _puzzleData!.pieces.length) {
+              _onPuzzleCompleted();
+            }
           }
         },
         child: pieceWidget,
@@ -704,6 +718,22 @@ class _PuzzleScreenState extends State<PuzzleScreen> with WidgetsBindingObserver
     );
   }
 
+  void _showRandomCelebration() {
+    final randomMessage = celebrationMessages[
+      math.Random().nextInt(celebrationMessages.length)
+    ];
+    
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(randomMessage),
+        duration: const Duration(milliseconds: 1200),
+        backgroundColor: Colors.orange,
+        behavior: SnackBarBehavior.floating,
+        margin: const EdgeInsets.all(16),
+      ),
+    );
+  }
+
   List<Widget> _buildPlacedPieces() {
     if (_anchorPiece == null || _anchorPosition == null) return [];
     return _placedPieces.map((piece) {
@@ -726,37 +756,12 @@ class _PuzzleScreenState extends State<PuzzleScreen> with WidgetsBindingObserver
           child: pieceWidget,
         );
 
-        // Make the anchor piece draggable and add pinch-to-zoom using only scale gestures
+        // Make the anchor piece draggable (removed pinch-to-zoom)
         pieceWidget = GestureDetector(
-          onScaleStart: (details) {
-            // Reset scaling flag
-            _isScaling = false;
-          },
-          onScaleUpdate: (details) {
+          onPanUpdate: (details) {
             setState(() {
-              if (details.scale != 1.0) {
-                // This is a pinch gesture - update scale
-                _isScaling = true;
-                final newScale = (_scale * details.scale).clamp(0.1, 1.0);
-                _scale = newScale;
-              } else {
-                // This is a pan gesture - update position
-                _anchorPosition = _anchorPosition! + details.focalPointDelta;
-              }
+              _anchorPosition = _anchorPosition! + details.delta;
             });
-          },
-          onScaleEnd: (details) {
-            // Show feedback only if scaling occurred
-            if (_isScaling) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('Puzzle size: ${(_scale * 100).round()}%'),
-                  duration: const Duration(milliseconds: 800),
-                  backgroundColor: Colors.blue,
-                ),
-              );
-            }
-            _isScaling = false;
           },
           child: pieceWidget,
         );

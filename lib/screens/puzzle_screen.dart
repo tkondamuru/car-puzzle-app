@@ -444,12 +444,11 @@ class _PuzzleScreenState extends State<PuzzleScreen> with WidgetsBindingObserver
               ? const Center(child: CircularProgressIndicator())
               : _buildCanvasContainer(),
         ),
-        floatingActionButton: GestureDetector(
-          onTap: _getNextPiece,
-          onLongPress: _showPieceDrawer,
-          child: FloatingActionButton(
-            onPressed: null, // Disabled since we handle gestures manually
-            tooltip: 'Tap: Get Next Piece / Reposition\nLong Press: Select Piece',
+        floatingActionButton: FloatingActionButton(
+          onPressed: _getNextPiece,
+          tooltip: 'Tap: Get Next Piece / Reposition\nLong Press: Select Piece',
+          child: GestureDetector(
+            onLongPress: _showPieceDrawer,
             child: const Icon(Icons.extension),
           ),
         ),

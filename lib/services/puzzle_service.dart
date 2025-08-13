@@ -40,7 +40,7 @@ class PuzzleService extends ChangeNotifier {
       );
     }
 
-    final dimensionsUrl = '$baseUrl/$dimensionsPath';
+    final dimensionsUrl = '$baseUrl/$dimensionsPath?v=1';
     final dimensionsResponse = await http.get(Uri.parse(dimensionsUrl));
     if (dimensionsResponse.statusCode != 200) {
       print('Failed to load dimensions.txt: ${dimensionsResponse.statusCode}');
@@ -53,7 +53,7 @@ class PuzzleService extends ChangeNotifier {
 
     final dimensionsString = dimensionsResponse.body;
     final lines = dimensionsString.split('\n');
-
+    print(dimensionsString);
     final boundsById = <String, Rect>{};
     for (final line in lines) {
       final parts = line.split(',');

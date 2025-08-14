@@ -53,7 +53,7 @@ class PuzzleService extends ChangeNotifier {
 
     final dimensionsString = dimensionsResponse.body;
     final lines = dimensionsString.split('\n');
-    print(dimensionsString);
+    //print(dimensionsString);
     final boundsById = <String, Rect>{};
     for (final line in lines) {
       final parts = line.split(',');

@@ -21,6 +21,15 @@ const List<String> celebrationMessages = [
   "🌟 Superstar!", "🛸 Out of This World!"
 ];
 
+const List<Color> celebrationColors = [
+  Colors.pink,
+  Colors.orange,
+  Colors.green,
+  Colors.blue,
+  Colors.purple,
+  Colors.red,
+];
+
 class PuzzleScreen extends StatefulWidget {
   const PuzzleScreen({super.key});
 
@@ -48,8 +57,13 @@ class _PuzzleScreenState extends State<PuzzleScreen> with WidgetsBindingObserver
   bool _showGhost = false;
 
   double _scale = 0.5;
+  double _rotation = 0.0; // in radians
   final GlobalKey _canvasKey = GlobalKey();
   int _pieceDropCounter = 0; // Track which side to drop pieces
+
+  String? _celebrationMessage;
+  Color? _celebrationColor;
+  Timer? _celebrationTimer;
 
   @override
   void initState() {
@@ -315,6 +329,7 @@ class _PuzzleScreenState extends State<PuzzleScreen> with WidgetsBindingObserver
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _timer?.cancel();
+    _celebrationTimer?.cancel();
     // State is saved in other lifecycle methods like didChangeAppLifecycleState, onWillPop, etc.
     super.dispose();
   }
@@ -387,16 +402,38 @@ class _PuzzleScreenState extends State<PuzzleScreen> with WidgetsBindingObserver
                           divisions: 9,
                           label: _scale.toStringAsFixed(1),
                           onChanged: (double value) {
-                            // Use setState from the main screen state
                             setState(() {
                               _scale = value;
                             });
-                            // Also update the modal sheet's state
                             setModalState(() {});
                           },
                         ),
                       ),
                       const Icon(Icons.photo_size_select_large),
+                    ],
+                  ),
+                  const SizedBox(height: 24),
+                  const Text('Rotate Puzzle', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(Icons.rotate_left),
+                      Expanded(
+                        child: Slider(
+                          value: _rotation,
+                          min: -3.14159,
+                          max: 3.14159,
+                          divisions: 36,
+                          label: (_rotation * 180 / 3.14159).toStringAsFixed(0) + '°',
+                          onChanged: (double value) {
+                            setState(() {
+                              _rotation = value;
+                            });
+                            setModalState(() {});
+                          },
+                        ),
+                      ),
+                      const Icon(Icons.rotate_right),
                     ],
                   ),
                 ],
@@ -427,11 +464,6 @@ class _PuzzleScreenState extends State<PuzzleScreen> with WidgetsBindingObserver
               icon: const Icon(Icons.info_outline),
               onPressed: _showPuzzleInfoSheet,
               tooltip: 'About Puzzle',
-            ),
-            IconButton(
-              icon: const Icon(Icons.tune),
-              onPressed: _showScaleSliderSheet,
-              tooltip: 'Precise Size Control',
             ),
             IconButton(
               icon: const Icon(Icons.refresh),
@@ -467,13 +499,36 @@ class _PuzzleScreenState extends State<PuzzleScreen> with WidgetsBindingObserver
               ? const Center(child: CircularProgressIndicator())
               : _buildCanvasContainer(),
         ),
-        floatingActionButton: FloatingActionButton(
-          onPressed: _getNextPiece,
-          tooltip: 'Tap: Get Next Piece / Reposition\nLong Press: Select Piece',
-          child: GestureDetector(
-            onLongPress: _showPieceDrawer,
-            child: const Icon(Icons.extension),
-          ),
+        floatingActionButton: Stack(
+          children: [
+            Align(
+              alignment: Alignment.bottomLeft,
+              child: Padding(
+                padding: const EdgeInsets.only(left: 32.0, bottom: 16.0),
+                child: FloatingActionButton(
+                  heroTag: 'scaleFab',
+                  onPressed: _showScaleSliderSheet,
+                  tooltip: 'Precise Size Control',
+                  child: const Icon(Icons.tune),
+                ),
+              ),
+            ),
+            Align(
+              alignment: Alignment.bottomRight,
+              child: Padding(
+                padding: const EdgeInsets.only(right: 16.0, bottom: 16.0),
+                child: FloatingActionButton(
+                  heroTag: 'pieceFab',
+                  onPressed: _getNextPiece,
+                  tooltip: 'Tap: Get Next Piece / Reposition\nLong Press: Select Piece',
+                  child: GestureDetector(
+                    onLongPress: _showPieceDrawer,
+                    child: const Icon(Icons.extension),
+                  ),
+                ),
+              ),
+            ),
+          ],
         ),
         bottomNavigationBar: BottomNavigationBar(
           items: <BottomNavigationBarItem>[
@@ -617,9 +672,36 @@ class _PuzzleScreenState extends State<PuzzleScreen> with WidgetsBindingObserver
           ..._buildPlacedPieces(),
           _buildGhostPreview(),
           _buildActivePiece(),
+          _buildCelebrationMessage(),
         ],
       );
     });
+  }
+
+  Widget _buildCelebrationMessage() {
+    if (_celebrationMessage == null) {
+      return const SizedBox.shrink();
+    }
+
+    return Align(
+      alignment: Alignment.topCenter,
+      child: Container(
+        margin: const EdgeInsets.only(top: 20),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: _celebrationColor ?? Colors.black.withOpacity(0.7),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Text(
+          _celebrationMessage!,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      ),
+    );
   }
 
   Widget _buildActivePiece() {
@@ -628,12 +710,14 @@ class _PuzzleScreenState extends State<PuzzleScreen> with WidgetsBindingObserver
     }
 
     final piece = _activePiece!;
-    // Use the full image path and bounds for the piece on the canvas
-    final pieceWidget = Image.network(
-      piece.imagePath,
-      width: piece.bounds.width * _scale,
-      height: piece.bounds.height * _scale,
-      fit: BoxFit.contain,
+    final pieceWidget = Transform.rotate(
+      angle: _rotation,
+      child: Image.network(
+        piece.imagePath,
+        width: piece.bounds.width * _scale,
+        height: piece.bounds.height * _scale,
+        fit: BoxFit.contain,
+      ),
     );
 
     return Positioned(
@@ -689,10 +773,34 @@ class _PuzzleScreenState extends State<PuzzleScreen> with WidgetsBindingObserver
 
   Offset _calculateTargetPosition(PuzzlePiece piece) {
     if (_anchorPiece == null || _anchorPosition == null) return Offset.zero;
-    final anchorAbsPos = _anchorPiece!.bounds.topLeft;
-    final currentPieceAbsPos = piece.bounds.topLeft;
-    final relativeOffset = currentPieceAbsPos - anchorAbsPos;
-    return _anchorPosition! + (relativeOffset * _scale);
+
+    // 1. Define centers in puzzle space (from JSON data)
+    final anchorCenterPuzzle = _anchorPiece!.bounds.center;
+    final pieceCenterPuzzle = piece.bounds.center;
+
+    // 2. Calculate the vector from the anchor's center to the piece's center
+    final relativeCenterVector = pieceCenterPuzzle - anchorCenterPuzzle;
+
+    // 3. Scale this vector
+    final scaledRelativeVector = relativeCenterVector * _scale;
+
+    // 4. Rotate this vector
+    final cosR = math.cos(_rotation);
+    final sinR = math.sin(_rotation);
+    final rotatedDx = scaledRelativeVector.dx * cosR - scaledRelativeVector.dy * sinR;
+    final rotatedDy = scaledRelativeVector.dx * sinR + scaledRelativeVector.dy * cosR;
+    final rotatedRelativeVector = Offset(rotatedDx, rotatedDy);
+
+    // 5. Find the anchor's center on the canvas
+    final anchorCenterCanvas = _anchorPosition! + (_anchorPiece!.bounds.size.center(Offset.zero) * _scale);
+
+    // 6. Calculate the piece's new center on the canvas
+    final pieceCenterCanvas = anchorCenterCanvas + rotatedRelativeVector;
+
+    // 7. Calculate the piece's top-left for the Positioned widget
+    final pieceTopLeftCanvas = pieceCenterCanvas - (piece.bounds.size.center(Offset.zero) * _scale);
+
+    return pieceTopLeftCanvas;
   }
 
   void _switchAnchor(PuzzlePiece newAnchorPiece) {
@@ -719,19 +827,22 @@ class _PuzzleScreenState extends State<PuzzleScreen> with WidgetsBindingObserver
   }
 
   void _showRandomCelebration() {
-    final randomMessage = celebrationMessages[
-      math.Random().nextInt(celebrationMessages.length)
-    ];
-    
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(randomMessage),
-        duration: const Duration(milliseconds: 1200),
-        backgroundColor: Colors.orange,
-        behavior: SnackBarBehavior.floating,
-        margin: const EdgeInsets.all(16),
-      ),
-    );
+    _celebrationTimer?.cancel();
+    final randomMessage = celebrationMessages[math.Random().nextInt(celebrationMessages.length)];
+    final randomColor = celebrationColors[math.Random().nextInt(celebrationColors.length)];
+
+    setState(() {
+      _celebrationMessage = randomMessage;
+      _celebrationColor = randomColor;
+    });
+
+    _celebrationTimer = Timer(const Duration(milliseconds: 1500), () {
+      if (mounted) {
+        setState(() {
+          _celebrationMessage = null;
+        });
+      }
+    });
   }
 
   List<Widget> _buildPlacedPieces() {
@@ -744,6 +855,10 @@ class _PuzzleScreenState extends State<PuzzleScreen> with WidgetsBindingObserver
         width: piece.bounds.width * _scale,
         height: piece.bounds.height * _scale,
         fit: BoxFit.fill,
+      );
+      pieceWidget = Transform.rotate(
+        angle: _rotation,
+        child: pieceWidget,
       );
 
       if (piece == _anchorPiece) {
@@ -795,17 +910,20 @@ class _PuzzleScreenState extends State<PuzzleScreen> with WidgetsBindingObserver
       top: targetPos.dy,
       width: piece.bounds.width * _scale,
       height: piece.bounds.height * _scale,
-      child: DottedBorder(
-        borderType: BorderType.RRect,
-        radius: const Radius.circular(4),
-        color: Colors.green.withOpacity(0.8),
-        strokeWidth: 3,
-        dashPattern: const [6, 3],
-        child: Opacity(
-          opacity: 0.4,
-          child: Image.network(
-            piece.imagePath,
-            fit: BoxFit.fill,
+      child: Transform.rotate(
+        angle: _rotation,
+        child: DottedBorder(
+          borderType: BorderType.RRect,
+          radius: const Radius.circular(4),
+          color: Colors.green.withOpacity(0.8),
+          strokeWidth: 3,
+          dashPattern: const [6, 3],
+          child: Opacity(
+            opacity: 0.4,
+            child: Image.network(
+              piece.imagePath,
+              fit: BoxFit.fill,
+            ),
           ),
         ),
       ),

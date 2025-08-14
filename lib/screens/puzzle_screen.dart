@@ -8,6 +8,8 @@ import 'package:car_puzzle_app/services/stats_service.dart';
 import 'package:car_puzzle_app/services/game_state.dart';
 import 'package:dotted_border/dotted_border.dart';
 
+enum ControlMode { scale, rotate, lock }
+
 const double SNAP_THRESHOLD = 25.0;
 
 const List<String> celebrationMessages = [
@@ -64,6 +66,10 @@ class _PuzzleScreenState extends State<PuzzleScreen> with WidgetsBindingObserver
   String? _celebrationMessage;
   Color? _celebrationColor;
   Timer? _celebrationTimer;
+
+  // New state variables for unified controls
+  ControlMode _controlMode = ControlMode.scale;
+  bool _isAnchorLocked = false;
 
   @override
   void initState() {
@@ -378,73 +384,6 @@ class _PuzzleScreenState extends State<PuzzleScreen> with WidgetsBindingObserver
     );
   }
 
-  void _showScaleSliderSheet() {
-    showModalBottomSheet(
-      context: context,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (BuildContext context, StateSetter setModalState) {
-            return Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 20.0),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Text('Adjust Puzzle Size', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(Icons.photo_size_select_small),
-                      Expanded(
-                        child: Slider(
-                          value: _scale,
-                          min: 0.1,
-                          max: 1.0,
-                          divisions: 9,
-                          label: _scale.toStringAsFixed(1),
-                          onChanged: (double value) {
-                            setState(() {
-                              _scale = value;
-                            });
-                            setModalState(() {});
-                          },
-                        ),
-                      ),
-                      const Icon(Icons.photo_size_select_large),
-                    ],
-                  ),
-                  const SizedBox(height: 24),
-                  const Text('Rotate Puzzle', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(Icons.rotate_left),
-                      Expanded(
-                        child: Slider(
-                          value: _rotation,
-                          min: -3.14159,
-                          max: 3.14159,
-                          divisions: 36,
-                          label: (_rotation * 180 / 3.14159).toStringAsFixed(0) + '°',
-                          onChanged: (double value) {
-                            setState(() {
-                              _rotation = value;
-                            });
-                            setModalState(() {});
-                          },
-                        ),
-                      ),
-                      const Icon(Icons.rotate_right),
-                    ],
-                  ),
-                ],
-              ),
-            );
-          },
-        );
-      },
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final gameState = Provider.of<GameState>(context);
@@ -499,66 +438,156 @@ class _PuzzleScreenState extends State<PuzzleScreen> with WidgetsBindingObserver
               ? const Center(child: CircularProgressIndicator())
               : _buildCanvasContainer(),
         ),
-        floatingActionButton: Stack(
+        bottomNavigationBar: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Align(
-              alignment: Alignment.bottomLeft,
-              child: Padding(
-                padding: const EdgeInsets.only(left: 32.0, bottom: 16.0),
-                child: FloatingActionButton(
-                  heroTag: 'scaleFab',
-                  onPressed: _showScaleSliderSheet,
-                  tooltip: 'Precise Size Control',
-                  child: const Icon(Icons.tune),
+            _buildControlPanel(),
+            BottomNavigationBar(
+              items: <BottomNavigationBarItem>[
+                const BottomNavigationBarItem(
+                  icon: Icon(Icons.home),
+                  label: 'Home',
                 ),
-              ),
-            ),
-            Align(
-              alignment: Alignment.bottomRight,
-              child: Padding(
-                padding: const EdgeInsets.only(right: 16.0, bottom: 16.0),
-                child: FloatingActionButton(
-                  heroTag: 'pieceFab',
-                  onPressed: _getNextPiece,
-                  tooltip: 'Tap: Get Next Piece / Reposition\nLong Press: Select Piece',
-                  child: GestureDetector(
-                    onLongPress: _showPieceDrawer,
-                    child: const Icon(Icons.extension),
-                  ),
+                const BottomNavigationBarItem(
+                  icon: Icon(Icons.dashboard),
+                  label: 'Dashboard',
                 ),
-              ),
+                BottomNavigationBarItem(
+                  icon: Icon(Icons.gamepad, color: isGameActive ? Colors.blueAccent : Colors.grey),
+                  label: 'My Game',
+                ),
+              ],
+              currentIndex: 2, // Always highlight "My Game"
+              selectedItemColor: Colors.blueAccent,
+              onTap: (index) {
+                _saveState(); // Save state before navigating
+                if (index == 0) {
+                  Navigator.of(context).pop('home');
+                } else if (index == 1) {
+                  Navigator.of(context).pop('dashboard');
+                }
+              },
+              type: BottomNavigationBarType.fixed,
             ),
           ],
-        ),
-        bottomNavigationBar: BottomNavigationBar(
-          items: <BottomNavigationBarItem>[
-            const BottomNavigationBarItem(
-              icon: Icon(Icons.home),
-              label: 'Home',
-            ),
-            const BottomNavigationBarItem(
-              icon: Icon(Icons.dashboard),
-              label: 'Dashboard',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.gamepad, color: isGameActive ? Colors.blueAccent : Colors.grey),
-              label: 'My Game',
-            ),
-          ],
-          currentIndex: 2, // Always highlight "My Game"
-          selectedItemColor: Colors.blueAccent,
-          onTap: (index) {
-            _saveState(); // Save state before navigating
-            if (index == 0) {
-              Navigator.of(context).pop('home');
-            } else if (index == 1) {
-              Navigator.of(context).pop('dashboard');
-            }
-          },
-          type: BottomNavigationBarType.fixed,
         ),
       ),
     );
+  }
+
+  Widget _buildControlPanel() {
+    return Material(
+      color: Theme.of(context).bottomAppBarTheme.color,
+      elevation: 8.0,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16.0, 8.0, 16.0, 8.0),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: <Widget>[
+            FloatingActionButton(
+              heroTag: 'controlModeFab',
+              mini: true,
+              onPressed: () {
+                setState(() {
+                  if (_controlMode == ControlMode.scale) {
+                    _controlMode = ControlMode.rotate;
+                  } else if (_controlMode == ControlMode.rotate) {
+                    _controlMode = ControlMode.lock;
+                  } else {
+                    _controlMode = ControlMode.scale;
+                  }
+                });
+              },
+              tooltip: _getControlModeTooltip(),
+              child: Icon(_getControlModeIcon()),
+            ),
+            Flexible(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                child: _buildMiddleControl(),
+              ),
+            ),
+            FloatingActionButton(
+              heroTag: 'pieceFab',
+              onPressed: _getNextPiece,
+              tooltip: 'Tap: Get Next Piece / Reposition\nLong Press: Select Piece',
+              child: GestureDetector(
+                onLongPress: _showPieceDrawer,
+                child: const Icon(Icons.extension),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _getControlModeTooltip() {
+    switch (_controlMode) {
+      case ControlMode.scale:
+        return 'Switch to Rotate';
+      case ControlMode.rotate:
+        return 'Switch to Lock Anchor';
+      case ControlMode.lock:
+        return 'Switch to Scale';
+    }
+  }
+
+  IconData _getControlModeIcon() {
+    switch (_controlMode) {
+      case ControlMode.scale:
+        return Icons.aspect_ratio;
+      case ControlMode.rotate:
+        return Icons.rotate_90_degrees_ccw;
+      case ControlMode.lock:
+        return _isAnchorLocked ? Icons.lock : Icons.lock_open;
+    }
+  }
+
+  Widget _buildMiddleControl() {
+    switch (_controlMode) {
+      case ControlMode.scale:
+        return Slider(
+          value: _scale,
+          min: 0.1,
+          max: 1.0,
+          divisions: 9,
+          label: _scale.toStringAsFixed(1),
+          onChanged: (double value) {
+            setState(() {
+              _scale = value;
+            });
+          },
+        );
+      case ControlMode.rotate:
+        return Slider(
+          value: _rotation,
+          min: -math.pi,
+          max: math.pi,
+          divisions: 36,
+          label: (_rotation * 180 / math.pi).toStringAsFixed(0) + '°',
+          onChanged: (double value) {
+            setState(() {
+              _rotation = value;
+            });
+          },
+        );
+      case ControlMode.lock:
+        return Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(_isAnchorLocked ? 'Anchor Locked' : 'Anchor Unlocked', style: const TextStyle(fontWeight: FontWeight.bold)),
+            Switch(
+              value: _isAnchorLocked,
+              onChanged: (bool value) {
+                setState(() {
+                  _isAnchorLocked = value;
+                });
+              },
+            ),
+          ],
+        );
+    }
   }
 
   Widget _buildCanvasContainer() {
@@ -640,7 +669,7 @@ class _PuzzleScreenState extends State<PuzzleScreen> with WidgetsBindingObserver
                               children: [
                                 Expanded(
                                   child: Image.network(
-                                    piece.thumbPath,
+                                    piece.imagePath,
                                     fit: BoxFit.contain,
                                   ),
                                 ),
@@ -874,9 +903,11 @@ class _PuzzleScreenState extends State<PuzzleScreen> with WidgetsBindingObserver
         // Make the anchor piece draggable (removed pinch-to-zoom)
         pieceWidget = GestureDetector(
           onPanUpdate: (details) {
-            setState(() {
-              _anchorPosition = _anchorPosition! + details.delta;
-            });
+            if (!_isAnchorLocked) {
+              setState(() {
+                _anchorPosition = _anchorPosition! + details.delta;
+              });
+            }
           },
           child: pieceWidget,
         );

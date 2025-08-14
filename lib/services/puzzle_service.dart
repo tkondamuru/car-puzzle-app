@@ -88,24 +88,15 @@ class PuzzleService extends ChangeNotifier {
     final pieces = <PuzzlePiece>[];
     boundsById.forEach((id, pieceBounds) {
       if (id.startsWith('g')) {
-        
-        final thumbId = id.replaceFirst('g', 't');
-        final thumbBounds = boundsById[thumbId] ?? Rect.zero;
-
         final imagePathFragment = puzzle.img.firstWhere(
             (path) => path.contains('_$id.'), orElse: () => '');
-        
-        final thumbPathFragment = puzzle.img.firstWhere(
-            (path) => path.contains('_$thumbId.'), orElse: () => '');
 
-        if (imagePathFragment.isNotEmpty && thumbPathFragment.isNotEmpty) {
+        if (imagePathFragment.isNotEmpty) {
              pieces.add(PuzzlePiece(
                 id: id,
                 bounds: pieceBounds, // Absolute bounds
-                thumbBounds: thumbBounds,
                 imageBounds: pieceBounds, // Absolute bounds
                 imagePath: '$baseUrl/$imagePathFragment',
-                thumbPath: '$baseUrl/$thumbPathFragment',
             ));
         }
       }

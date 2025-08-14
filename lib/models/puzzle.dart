@@ -50,20 +50,16 @@ class PuzzlePiece {
   final String id;
   // The absolute bounds of the piece from the original SVG coordinate system.
   final Rect bounds;
-  final Rect thumbBounds; // Actual thumbnail bounds
   // The absolute bounds of the piece from the original SVG coordinate system. Same as `bounds`.
   final Rect imageBounds;
   final String imagePath;
-  final String thumbPath;
   bool isPlaced;
 
   PuzzlePiece({
     required this.id,
     required this.bounds,
-    required this.thumbBounds,
     required this.imageBounds,
     required this.imagePath,
-    required this.thumbPath,
     this.isPlaced = false,
   });
 }

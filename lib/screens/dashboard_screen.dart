@@ -1,3 +1,5 @@
+import 'package:car_puzzle_app/models/puzzle.dart';
+import 'package:car_puzzle_app/services/puzzle_service.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:car_puzzle_app/services/stats_service.dart';
@@ -15,7 +17,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
   void initState() {
     super.initState();
     // Fetch stats when the screen is initialized
-    Provider.of<StatsService>(context, listen: false).init();
   }
 
   String _formatTime(int seconds) {
@@ -77,6 +78,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Widget _buildCompletedPuzzlesList() {
+    final puzzleService = Provider.of<PuzzleService>(context, listen: false);
+
     return Container(
       margin: const EdgeInsets.all(16.0),
       decoration: BoxDecoration(
@@ -85,7 +88,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       ),
       child: Consumer<StatsService>(
         builder: (context, statsService, child) {
-          if (statsService.completedPuzzles.isEmpty) {
+          if (statsService.completionTimes.isEmpty) {
             return const Center(
               child: Text(
                 'No puzzles completed yet. Go solve some!',
@@ -94,20 +97,37 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
             );
           }
+          final completedPuzzles = statsService.completionTimes.entries.toList();
           return ListView.builder(
-            itemCount: statsService.completedPuzzles.length,
+            itemCount: completedPuzzles.length,
             itemBuilder: (context, index) {
-              final puzzleId = statsService.completedPuzzles[index];
-              final time = statsService.puzzleTimes[puzzleId] ?? 0;
+              final puzzleEntry = completedPuzzles[index];
+              final puzzleId = puzzleEntry.key;
+              final time = puzzleEntry.value;
+
+              // Find the puzzle object
+              Puzzle? puzzle;
+              try {
+                puzzle = puzzleService.puzzles.firstWhere((p) => p.id == puzzleId);
+              } catch (e) {
+                puzzle = null;
+              }
+
               return ListTile(
                 leading: const Icon(Icons.emoji_events, color: Colors.amber, size: 40),
                 title: Text(
-                  puzzleId,
+                  puzzle?.name ?? puzzleId,
                   style: const TextStyle(fontWeight: FontWeight.bold),
                 ),
                 subtitle: Text(
                   'Completed in: ${_formatTime(time)}',
                   style: const TextStyle(color: Colors.grey),
+                ),
+                trailing: ElevatedButton(
+                  onPressed: puzzle == null ? null : () {
+                    Navigator.pushNamed(context, '/puzzle', arguments: puzzle);
+                  },
+                  child: const Text('View'),
                 ),
               );
             },

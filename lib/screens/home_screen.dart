@@ -219,11 +219,7 @@ class _HomeScreenState extends State<HomeScreen> {
       if (mounted) {
         final gameState = Provider.of<GameState>(context, listen: false);
         gameState.setActivePuzzle(puzzle);
-        Navigator.pushNamed(context, '/puzzle', arguments: puzzle).then((result) {
-          if (result != null && mounted) {
-            gameState.setPendingNavigation(result.toString());
-          }
-        });
+        Navigator.pushNamed(context, '/puzzle', arguments: puzzle);
       }
     } else {
       if (mounted) {

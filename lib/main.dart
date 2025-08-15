@@ -21,7 +21,7 @@ class MyApp extends StatelessWidget {
       providers: [
         ChangeNotifierProvider(create: (_) => PuzzleService()),
         ChangeNotifierProvider(
-          create: (_) => StatsService()..init(),
+          create: (_) => StatsService(),
         ),
         ChangeNotifierProvider(create: (_) => GameState()),
       ],
@@ -73,31 +73,11 @@ class _MainNavigatorState extends State<MainNavigator> {
     final gameState = Provider.of<GameState>(context, listen: false);
     if (index == 2) { // "My Game" tab
       if (gameState.activePuzzle != null) {
-        Navigator.pushNamed(context, '/puzzle', arguments: gameState.activePuzzle).then((result) {
-          // If user navigated to dashboard from puzzle screen, switch to dashboard tab
-          if (result == 'dashboard') {
-            setState(() {
-              _selectedIndex = 1;
-            });
-          }
-        });
+        Navigator.pushNamed(context, '/puzzle', arguments: gameState.activePuzzle);
       }
     } else {
       setState(() {
         _selectedIndex = index;
-      });
-    }
-  }
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    // Listen for navigation changes from GameState
-    final gameState = Provider.of<GameState>(context);
-    if (gameState.pendingNavigation != null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        _handlePendingNavigation(gameState.pendingNavigation!);
-        gameState.clearPendingNavigation();
       });
     }
   }
@@ -121,6 +101,14 @@ class _MainNavigatorState extends State<MainNavigator> {
   Widget build(BuildContext context) {
     final gameState = Provider.of<GameState>(context);
     final bool isGameActive = gameState.activePuzzle != null;
+
+    // Handle pending navigation
+    if (gameState.pendingNavigation != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _handlePendingNavigation(gameState.pendingNavigation!);
+        gameState.clearPendingNavigation();
+      });
+    }
 
     return Scaffold(
       body: IndexedStack(

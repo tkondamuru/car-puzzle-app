@@ -7,6 +7,7 @@ import 'package:car_puzzle_app/services/puzzle_service.dart';
 import 'package:car_puzzle_app/services/stats_service.dart';
 import 'package:car_puzzle_app/services/game_state.dart';
 import 'package:dotted_border/dotted_border.dart';
+import 'package:confetti/confetti.dart';
 
 enum ControlMode { scale, rotate, lock }
 
@@ -69,12 +70,15 @@ class _PuzzleScreenState extends State<PuzzleScreen> with WidgetsBindingObserver
 
   // New state variables for unified controls
   ControlMode _controlMode = ControlMode.scale;
-  bool _isAnchorLocked = false;
+  bool _isAnchorLocked = true;
+
+  late ConfettiController _confettiController;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _confettiController = ConfettiController(duration: const Duration(seconds: 10));
   }
 
   @override
@@ -98,6 +102,31 @@ class _PuzzleScreenState extends State<PuzzleScreen> with WidgetsBindingObserver
     
     await _loadPuzzleData();
     if (!mounted) return;
+
+    if (_statsService.isPuzzleCompleted(puzzle.id)) {
+      final completedState = await _statsService.getCompletedPuzzleState(puzzle.id);
+      if (completedState != null && mounted) {
+        setState(() {
+          _scale = completedState['scale'];
+          _rotation = completedState['rotation'];
+          _anchorPosition = Offset(completedState['anchorPosition']['dx'], completedState['anchorPosition']['dy']);
+          
+          final anchorId = completedState['anchorId'];
+          _anchorPiece = _puzzleData!.pieces.firstWhere((p) => p.id == anchorId);
+
+          // Mark all pieces as placed
+          _placedPieces = Set.from(_puzzleData!.pieces);
+          for (var piece in _puzzleData!.pieces) {
+            piece.isPlaced = true;
+          }
+          
+          _timer?.cancel(); // Stop timer for completed puzzles
+          _showRandomCelebration(); // Show a celebration message
+          _playConfetti();
+        });
+        return; // Skip normal initialization
+      }
+    }
 
     _loadState();
     if (!mounted) return;
@@ -130,6 +159,9 @@ class _PuzzleScreenState extends State<PuzzleScreen> with WidgetsBindingObserver
         _anchorPiece = _gameState.anchorPiece;
         _anchorPosition = _gameState.anchorPosition;
         _elapsedSeconds = _gameState.elapsedSeconds;
+        _scale = _gameState.scale;
+        _rotation = _gameState.rotation;
+        _isAnchorLocked = _gameState.isAnchorLocked;
         
         // Update piece isPlaced status based on saved state
         if (_puzzleData != null) {
@@ -147,6 +179,9 @@ class _PuzzleScreenState extends State<PuzzleScreen> with WidgetsBindingObserver
       anchorPiece: _anchorPiece,
       anchorPosition: _anchorPosition,
       elapsedSeconds: _elapsedSeconds,
+      scale: _scale,
+      rotation: _rotation,
+      isAnchorLocked: _isAnchorLocked,
     );
   }
 
@@ -199,19 +234,19 @@ class _PuzzleScreenState extends State<PuzzleScreen> with WidgetsBindingObserver
     } else {
       // Use alternating positioning for new pieces
       _pieceDropCounter++;
-      final bool dropOnLeft = _pieceDropCounter % 2 == 1;
+      final bool dropAtBottomLeft = _pieceDropCounter % 2 == 1;
       
-      if (dropOnLeft) {
-        // Position on the left side
+      if (dropAtBottomLeft) {
+        // Position at the bottom-left corner
         position = Offset(
           50.0, // Left margin
-          (canvasSize.height / 3) - (piece.bounds.height * _scale / 2),
+          canvasSize.height - (piece.bounds.height * _scale) - 50.0, // Bottom margin
         );
       } else {
-        // Position on the right side
+        // Position at the top-right corner
         position = Offset(
           canvasSize.width - (piece.bounds.width * _scale) - 50.0, // Right margin
-          (canvasSize.height * 2 / 3) - (piece.bounds.height * _scale / 2),
+          50.0, // Top margin
         );
       }
     }
@@ -249,22 +284,22 @@ class _PuzzleScreenState extends State<PuzzleScreen> with WidgetsBindingObserver
     final canvasSize = renderBox.size;
     final piece = _activePiece!;
     
-    // Alternate between left and right positioning
+    // Alternate between bottom-left and top-right positioning
     _pieceDropCounter++;
-    final bool dropOnLeft = _pieceDropCounter % 2 == 1;
+    final bool dropAtBottomLeft = _pieceDropCounter % 2 == 1;
     
     final Offset newPosition;
-    if (dropOnLeft) {
-      // Position on the left side
+    if (dropAtBottomLeft) {
+      // Position at the bottom-left corner
       newPosition = Offset(
         50.0, // Left margin
-        (canvasSize.height / 3) - (piece.bounds.height * _scale / 2),
+        canvasSize.height - (piece.bounds.height * _scale) - 50.0, // Bottom margin
       );
     } else {
-      // Position on the right side
+      // Position at the top-right corner
       newPosition = Offset(
         canvasSize.width - (piece.bounds.width * _scale) - 50.0, // Right margin
-        (canvasSize.height * 2 / 3) - (piece.bounds.height * _scale / 2),
+        50.0, // Top margin
       );
     }
     
@@ -286,7 +321,23 @@ class _PuzzleScreenState extends State<PuzzleScreen> with WidgetsBindingObserver
 
   void _onPuzzleCompleted() {
     _timer?.cancel();
-    _statsService.savePuzzleCompletion(puzzle.name, _elapsedSeconds);
+    _statsService.savePuzzleCompletion(puzzle.id, _elapsedSeconds);
+    _playConfetti();
+    
+    // Save completed state
+    if (_anchorPiece != null && _anchorPosition != null) {
+      final completedState = {
+        'anchorId': _anchorPiece!.id,
+        'anchorPosition': {
+          'dx': _anchorPosition!.dx,
+          'dy': _anchorPosition!.dy,
+        },
+        'scale': _scale,
+        'rotation': _rotation,
+      };
+      _statsService.saveCompletedPuzzleState(puzzle.id, completedState);
+    }
+
     _gameState.clearActivePuzzle();
 
     showDialog(
@@ -308,6 +359,10 @@ class _PuzzleScreenState extends State<PuzzleScreen> with WidgetsBindingObserver
   }
 
   void _resetPuzzle() {
+    _confettiController.stop();
+    // Clear completed state from stats service
+    _statsService.clearCompletedPuzzleState(puzzle.id);
+
     setState(() {
       _placedPieces.clear();
       for (var piece in _puzzleData?.pieces ?? []) {
@@ -320,7 +375,15 @@ class _PuzzleScreenState extends State<PuzzleScreen> with WidgetsBindingObserver
       _activePiecePosition = null;
       _showGhost = false;
       _pieceDropCounter = 0; // Reset piece positioning counter
+      // Reset UI controls to default
+      _scale = 0.5;
+      _rotation = 0.0;
+      _isAnchorLocked = true;
     });
+
+    // Also clear the session state
+    _saveState();
+
     _startTimer();
     
     // Always place g0 as the anchor after reset
@@ -331,11 +394,16 @@ class _PuzzleScreenState extends State<PuzzleScreen> with WidgetsBindingObserver
     });
   }
 
+  void _playConfetti() {
+    _confettiController.play();
+  }
+
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _timer?.cancel();
     _celebrationTimer?.cancel();
+    _confettiController.dispose();
     // State is saved in other lifecycle methods like didChangeAppLifecycleState, onWillPop, etc.
     super.dispose();
   }
@@ -376,6 +444,7 @@ class _PuzzleScreenState extends State<PuzzleScreen> with WidgetsBindingObserver
               const Text('• Green piece is the anchor - drag it to move all pieces'),
               const Text('• Double-tap or long-press any snapped piece to make it the new anchor'),
               const Text('• Use the tune button for precise size control'),
+              const Text('• For best experience, drag items by their center.'),
               const SizedBox(height: 16),
             ],
           ),
@@ -461,10 +530,13 @@ class _PuzzleScreenState extends State<PuzzleScreen> with WidgetsBindingObserver
               selectedItemColor: Colors.blueAccent,
               onTap: (index) {
                 _saveState(); // Save state before navigating
+                final gameState = Provider.of<GameState>(context, listen: false);
                 if (index == 0) {
-                  Navigator.of(context).pop('home');
+                  gameState.setPendingNavigation('home');
+                  Navigator.of(context).pop();
                 } else if (index == 1) {
-                  Navigator.of(context).pop('dashboard');
+                  gameState.setPendingNavigation('dashboard');
+                  Navigator.of(context).pop();
                 }
               },
               type: BottomNavigationBarType.fixed,
@@ -702,6 +774,24 @@ class _PuzzleScreenState extends State<PuzzleScreen> with WidgetsBindingObserver
           _buildGhostPreview(),
           _buildActivePiece(),
           _buildCelebrationMessage(),
+          Align(
+            alignment: Alignment.topCenter,
+            child: ConfettiWidget(
+              confettiController: _confettiController,
+              blastDirectionality: BlastDirectionality.explosive,
+              particleDrag: 0.05,
+              emissionFrequency: 0.02,
+              numberOfParticles: 40,
+              gravity: 0.5,
+              colors: const [
+                Colors.green,
+                Colors.blue,
+                Colors.pink,
+                Colors.orange,
+                Colors.purple
+              ],
+            ),
+          ),
         ],
       );
     });
@@ -753,6 +843,7 @@ class _PuzzleScreenState extends State<PuzzleScreen> with WidgetsBindingObserver
       left: _activePiecePosition!.dx,
       top: _activePiecePosition!.dy,
       child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
         onLongPressStart: (details) {
           // Show ghost immediately on long press start
           setState(() {
@@ -902,18 +993,18 @@ class _PuzzleScreenState extends State<PuzzleScreen> with WidgetsBindingObserver
 
         // Make the anchor piece draggable (removed pinch-to-zoom)
         pieceWidget = GestureDetector(
-          onPanUpdate: (details) {
-            if (!_isAnchorLocked) {
-              setState(() {
-                _anchorPosition = _anchorPosition! + details.delta;
-              });
-            }
+          behavior: HitTestBehavior.opaque,
+          onPanUpdate: _isAnchorLocked ? null : (details) {
+            setState(() {
+              _anchorPosition = _anchorPosition! + details.delta;
+            });
           },
           child: pieceWidget,
         );
       } else {
         // Add double-tap and long-press detection for non-anchor pieces
         pieceWidget = GestureDetector(
+          behavior: HitTestBehavior.translucent, // Allow gestures to pass through
           onDoubleTap: () => _switchAnchor(piece),
           onLongPress: () => _switchAnchor(piece),
           child: Container(

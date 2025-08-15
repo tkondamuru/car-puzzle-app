@@ -5,7 +5,6 @@ class GameState extends ChangeNotifier {
   Puzzle? _activePuzzle;
   Puzzle? get activePuzzle => _activePuzzle;
 
-  // Saved state for the active puzzle
   Set<PuzzlePiece> _placedPieces = {};
   Set<PuzzlePiece> get placedPieces => _placedPieces;
 
@@ -18,55 +17,72 @@ class GameState extends ChangeNotifier {
   int _elapsedSeconds = 0;
   int get elapsedSeconds => _elapsedSeconds;
 
-  // Navigation state
+  // New fields
+  double _scale = 0.5;
+  double get scale => _scale;
+
+  double _rotation = 0.0;
+  double get rotation => _rotation;
+
+  bool _isAnchorLocked = false;
+  bool get isAnchorLocked => _isAnchorLocked;
+
   String? _pendingNavigation;
   String? get pendingNavigation => _pendingNavigation;
 
-  void setActivePuzzle(Puzzle puzzle) {
-    // If it's a new puzzle (different ID), clear the old state.
-    if (_activePuzzle?.id != puzzle.id) {
-      clearPuzzleState();
-      _activePuzzle = puzzle;
-    } else {
-      // Same puzzle, just update the reference
-      _activePuzzle = puzzle;
-    }
-    notifyListeners();
-  }
-
-  void savePuzzleState({
-    required Set<PuzzlePiece> placedPieces,
-    required PuzzlePiece? anchorPiece,
-    required Offset? anchorPosition,
-    required int elapsedSeconds,
-  }) {
-    _placedPieces = Set.from(placedPieces);
-    _anchorPiece = anchorPiece;
-    _anchorPosition = anchorPosition;
-    _elapsedSeconds = elapsedSeconds;
-    notifyListeners();
-  }
-
-  void clearPuzzleState() {
-    _placedPieces = {};
-    _anchorPiece = null;
-    _anchorPosition = null;
-    _elapsedSeconds = 0;
-  }
-
-  void clearActivePuzzle() {
-    _activePuzzle = null;
-    clearPuzzleState();
-    notifyListeners();
-  }
-
-  void setPendingNavigation(String? navigation) {
-    _pendingNavigation = navigation;
+  void setPendingNavigation(String target) {
+    _pendingNavigation = target;
     notifyListeners();
   }
 
   void clearPendingNavigation() {
     _pendingNavigation = null;
+  }
+
+  void setActivePuzzle(Puzzle puzzle) {
+    if (_activePuzzle?.id != puzzle.id) {
+      _activePuzzle = puzzle;
+      _placedPieces = {};
+      _anchorPiece = null;
+      _anchorPosition = null;
+      _elapsedSeconds = 0;
+      _scale = 0.5;
+      _rotation = 0.0;
+      _isAnchorLocked = true;
+      notifyListeners();
+    }
+  }
+
+  void savePuzzleState({
+    required Set<PuzzlePiece> placedPieces,
+    PuzzlePiece? anchorPiece,
+    Offset? anchorPosition,
+    required int elapsedSeconds,
+    // New parameters
+    double? scale,
+    double? rotation,
+    bool? isAnchorLocked,
+  }) {
+    _placedPieces = placedPieces;
+    _anchorPiece = anchorPiece;
+    _anchorPosition = anchorPosition;
+    _elapsedSeconds = elapsedSeconds;
+    // New assignments
+    if (scale != null) _scale = scale;
+    if (rotation != null) _rotation = rotation;
+    if (isAnchorLocked != null) _isAnchorLocked = isAnchorLocked;
+    notifyListeners();
+  }
+
+  void clearActivePuzzle() {
+    _activePuzzle = null;
+    _placedPieces = {};
+    _anchorPiece = null;
+    _anchorPosition = null;
+    _elapsedSeconds = 0;
+    _scale = 0.5;
+    _rotation = 0.0;
+    _isAnchorLocked = false;
     notifyListeners();
   }
 }
